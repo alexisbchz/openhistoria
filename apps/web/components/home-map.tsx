@@ -9,6 +9,9 @@ import {
   MapZoomControl,
 } from "@workspace/ui/components/map"
 
+import { HomeHud } from "@/components/home-hud"
+import { TimeControls } from "@/components/time-controls"
+
 export function HomeMap() {
   return (
     <Map
@@ -21,7 +24,8 @@ export function HomeMap() {
       <MapSearchControl position="top-2 left-2" placeholder="Search a place…" />
       <MapZoomControl position="top-2 left-64" />
       <MapFullscreenControl position="top-2 right-2" />
-      <MapLocateControl position="bottom-2 right-2" />
+      <MapLocateControl position="top-11 right-2" />
+      <HomeHud bottomRight={<TimeControls />} />
     </Map>
   )
 }
