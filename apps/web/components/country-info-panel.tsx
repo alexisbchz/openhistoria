@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { useEffect, useReducer, useState, type ReactNode } from "react"
 
+import { CountryFlag } from "@/components/country-flag"
 import { FloatingPanel } from "@/components/floating-panel"
 import { useMapSelection } from "@/components/map-country-regions"
 
@@ -106,7 +107,13 @@ export function CountryInfoPanel() {
       open
       onClose={() => setSelected(null)}
       title={selected.name}
-      icon={<GlobeIcon className="size-4" />}
+      icon={
+        <CountryFlag
+          code={code}
+          title={selected.name}
+          className="h-4 w-auto rounded-[1px] ring-1 ring-black/15"
+        />
+      }
       position={pos}
       onPositionChange={setPos}
       className="w-[360px]"

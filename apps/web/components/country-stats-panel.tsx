@@ -19,6 +19,7 @@ import {
 import { useMemo, useState, type ReactNode } from "react"
 
 import { CabinetSheet } from "@/components/cabinet-sheet"
+import { CountryFlag } from "@/components/country-flag"
 import { FloatingPanel } from "@/components/floating-panel"
 import { useGame, useGameActions } from "@/components/game-provider"
 import { useHudState } from "@/components/hud-state"
@@ -94,7 +95,13 @@ export function CountryStatsPanel() {
       open={statsOpen}
       onClose={closeStats}
       title={stats.name}
-      icon={<LandmarkIcon className="size-4" />}
+      icon={
+        <CountryFlag
+          code={stats.code}
+          title={stats.name}
+          className="h-4 w-auto rounded-[1px] ring-1 ring-black/15"
+        />
+      }
       position={statsPos}
       onPositionChange={setStatsPos}
       className="w-80"
