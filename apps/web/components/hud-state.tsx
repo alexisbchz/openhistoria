@@ -26,6 +26,14 @@ interface HudStateValue {
   statsPos: PanelPos
   setStatsPos: (pos: PanelPos) => void
 
+  // Place-search panel (floating)
+  searchOpen: boolean
+  openSearch: () => void
+  closeSearch: () => void
+  toggleSearch: () => void
+  searchPos: PanelPos
+  setSearchPos: (pos: PanelPos) => void
+
   // Decisions panel (floating)
   decisionsOpen: boolean
   openDecisions: () => void
@@ -51,6 +59,11 @@ function defaultStatsPos(): PanelPos {
   return { x: 16, y: 16 }
 }
 
+function defaultSearchPos(): PanelPos {
+  // Just below where the search-location button sits.
+  return { x: 16, y: 72 }
+}
+
 function defaultDecisionsPos(): PanelPos {
   if (typeof window === "undefined") return { x: 200, y: 80 }
   const w = 820
@@ -64,6 +77,9 @@ function defaultDecisionsPos(): PanelPos {
 export function HudStateProvider({ children }: { children: ReactNode }) {
   const [statsOpen, setStatsOpen] = useState(false)
   const [statsPos, setStatsPos] = useState<PanelPos>(defaultStatsPos)
+
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchPos, setSearchPos] = useState<PanelPos>(defaultSearchPos)
 
   const [decisionsOpen, setDecisionsOpen] = useState(false)
   const [decisionsPos, setDecisionsPos] = useState<PanelPos | null>(null)
@@ -79,6 +95,10 @@ export function HudStateProvider({ children }: { children: ReactNode }) {
   const openStats = useCallback(() => setStatsOpen(true), [])
   const closeStats = useCallback(() => setStatsOpen(false), [])
   const toggleStats = useCallback(() => setStatsOpen((v) => !v), [])
+
+  const openSearch = useCallback(() => setSearchOpen(true), [])
+  const closeSearch = useCallback(() => setSearchOpen(false), [])
+  const toggleSearch = useCallback(() => setSearchOpen((v) => !v), [])
 
   const openDecisions = useCallback(() => {
     if (game && !game.gameOver && !game.pendingEvent) {
@@ -146,6 +166,12 @@ export function HudStateProvider({ children }: { children: ReactNode }) {
       toggleStats,
       statsPos,
       setStatsPos,
+      searchOpen,
+      openSearch,
+      closeSearch,
+      toggleSearch,
+      searchPos,
+      setSearchPos,
       decisionsOpen,
       openDecisions,
       closeDecisions,
@@ -165,6 +191,11 @@ export function HudStateProvider({ children }: { children: ReactNode }) {
       closeStats,
       toggleStats,
       statsPos,
+      searchOpen,
+      openSearch,
+      closeSearch,
+      toggleSearch,
+      searchPos,
       decisionsOpen,
       openDecisions,
       closeDecisions,

@@ -1,17 +1,27 @@
 "use client"
 
+import { FR } from "country-flag-icons/react/3x2"
 import Image from "next/image"
 import type { ReactNode } from "react"
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@workspace/ui/components/tooltip"
+
 import { BriefingToasts } from "@/components/briefing-toasts"
+import { CountryInfoPanel } from "@/components/country-info-panel"
 import { CountryStatsPanel } from "@/components/country-stats-panel"
 import { DecisionsPanel } from "@/components/decisions-panel"
+import { PlaceSearchPanel } from "@/components/place-search-panel"
 import { EventDialog } from "@/components/event-dialog"
 import { GameOverDialog } from "@/components/game-over-dialog"
 import { HudStateProvider, useHudState } from "@/components/hud-state"
 import { KeyboardShortcuts } from "@/components/keyboard-shortcuts"
 import { PauseMenu } from "@/components/pause-menu"
 import { PresidentialActionsButton } from "@/components/presidential-actions-button"
+import { SearchLocationButton } from "@/components/search-location-button"
 import { WelcomeDialog } from "@/components/welcome-dialog"
 
 interface HomeHudProps {
@@ -68,7 +78,12 @@ function HudShell({
         </div>
       )}
       <KeyboardShortcuts />
+      <div className="pointer-events-auto absolute top-2 left-2 z-[1001]">
+        <SearchLocationButton />
+      </div>
       <CountryStatsPanel />
+      <CountryInfoPanel />
+      <PlaceSearchPanel />
       <DecisionsPanel />
       <EventDialog />
       <GameOverDialog />
@@ -83,81 +98,29 @@ function HomeHudCharacter() {
   const { toggleStats, toggleDecisions } = useHudState()
   return (
     <div className="relative">
-      <button
-        type="button"
-        aria-label="Toggle country stats"
-        title="Country stats"
-        onClick={toggleStats}
-        className="block cursor-pointer transition-transform hover:scale-[1.02] active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <Image
-          src="/characters/macron.png"
-          alt="Macron"
-          width={256}
-          height={384}
-          className="h-64 w-auto"
-          priority
-        />
-      </button>
-      <FrenchFlag className="pointer-events-none absolute bottom-2 left-2 h-8 w-auto drop-shadow-md" />
+      <Tooltip>
+        <TooltipTrigger
+          type="button"
+          aria-label="Toggle country stats"
+          onClick={toggleStats}
+          className="block cursor-pointer transition-transform hover:scale-[1.02] active:translate-y-px focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Image
+            src="/characters/macron.png"
+            alt="Macron"
+            width={256}
+            height={384}
+            className="h-64 w-auto"
+            priority
+          />
+        </TooltipTrigger>
+        <TooltipContent side="top">Country stats (S)</TooltipContent>
+      </Tooltip>
+      <FR
+        title="France"
+        className="pointer-events-none absolute bottom-2 left-2 h-8 w-auto rounded-[2px] shadow-md ring-1 ring-black/20"
+      />
       <PresidentialActionsButton onClick={toggleDecisions} />
     </div>
-  )
-}
-
-function FrenchFlag({ className }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 30 20"
-      className={className}
-      aria-label="Flag of France"
-    >
-      <defs>
-        <linearGradient
-          id="french-flag-folds"
-          x1="0"
-          x2="30"
-          y1="0"
-          y2="0"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0" stopColor="#000" stopOpacity="0.35" />
-          <stop offset="0.12" stopColor="#fff" stopOpacity="0.15" />
-          <stop offset="0.25" stopColor="#000" stopOpacity="0.25" />
-          <stop offset="0.38" stopColor="#fff" stopOpacity="0.15" />
-          <stop offset="0.5" stopColor="#000" stopOpacity="0.2" />
-          <stop offset="0.62" stopColor="#fff" stopOpacity="0.15" />
-          <stop offset="0.75" stopColor="#000" stopOpacity="0.25" />
-          <stop offset="0.88" stopColor="#fff" stopOpacity="0.15" />
-          <stop offset="1" stopColor="#000" stopOpacity="0.35" />
-        </linearGradient>
-        <linearGradient
-          id="french-flag-sheen"
-          x1="0"
-          x2="0"
-          y1="0"
-          y2="20"
-          gradientUnits="userSpaceOnUse"
-        >
-          <stop offset="0" stopColor="#fff" stopOpacity="0.25" />
-          <stop offset="0.5" stopColor="#fff" stopOpacity="0" />
-          <stop offset="1" stopColor="#000" stopOpacity="0.2" />
-        </linearGradient>
-      </defs>
-      <rect x="0" width="10" height="20" fill="#000091" />
-      <rect x="10" width="10" height="20" fill="#FFFFFF" />
-      <rect x="20" width="10" height="20" fill="#E1000F" />
-      <rect width="30" height="20" fill="url(#french-flag-folds)" />
-      <rect width="30" height="20" fill="url(#french-flag-sheen)" />
-      <rect
-        x="0.15"
-        y="0.15"
-        width="29.7"
-        height="19.7"
-        fill="none"
-        stroke="rgba(0,0,0,0.35)"
-        strokeWidth="0.3"
-      />
-    </svg>
   )
 }

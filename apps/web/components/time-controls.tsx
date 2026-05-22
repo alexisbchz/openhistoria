@@ -26,37 +26,63 @@ export function TimeControls() {
       <div className="text-center text-sm font-semibold leading-tight tabular-nums">
         {dateFormatter.format(game.date)}
       </div>
-      <div className="mt-2 flex items-center gap-1.5">
+      <div className="mt-2 flex items-center gap-2">
         <Button
           type="button"
           size="icon-sm"
           variant={game.paused ? "default" : "secondary"}
           onClick={togglePause}
           aria-label={game.paused ? "Play" : "Pause"}
-          title={game.paused ? "Play" : "Pause"}
+          title={game.paused ? "Play (Space)" : "Pause (Space)"}
         >
           {game.paused ? <PlayIcon /> : <PauseIcon />}
         </Button>
-        <div className="flex gap-0.5">
-          {SPEED_LEVELS.map((level) => (
-            <button
-              key={level}
-              type="button"
-              onClick={() => setSpeed(level)}
-              aria-label={`Speed ${level}`}
-              title={`Speed ${level}`}
-              className={cn(
-                "h-7 w-6 rounded-sm border text-xs font-medium tabular-nums transition-colors",
-                game.speed === level
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-secondary text-secondary-foreground hover:bg-secondary/70"
-              )}
-            >
-              {level}
-            </button>
-          ))}
-        </div>
+        <SpeedGauge
+          value={game.speed}
+          paused={game.paused}
+          onChange={setSpeed}
+        />
       </div>
+    </div>
+  )
+}
+
+function SpeedGauge({
+  value,
+  paused,
+  onChange,
+}: {
+  value: GameSpeed
+  paused: boolean
+  onChange: (speed: GameSpeed) => void
+}) {
+  return (
+    <div
+      className="flex items-center gap-1 rounded-sm bg-muted/40 px-1 py-1"
+      role="group"
+      aria-label="Game speed"
+    >
+      {SPEED_LEVELS.map((level) => {
+        const active = !paused && level <= value
+        return (
+          <button
+            key={level}
+            type="button"
+            onClick={() => onChange(level)}
+            aria-label={`Speed ${level}`}
+            aria-pressed={value === level}
+            title={`Speed ${level} (${level})`}
+            className={cn(
+              "h-2.5 w-5 rounded-[2px] transition-colors",
+              active
+                ? "bg-primary"
+                : value === level
+                  ? "bg-primary/30"
+                  : "bg-secondary/50 hover:bg-secondary"
+            )}
+          />
+        )
+      })}
     </div>
   )
 }

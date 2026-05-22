@@ -367,6 +367,9 @@ export class Game {
       pendingEvent: null,
       briefing,
       gameOver,
+      // Resume the clock once the player has decided; the auto-pause from when
+      // the event arrived shouldn't persist past the choice.
+      paused: gameOver ? this.paused : false,
     })
   }
 

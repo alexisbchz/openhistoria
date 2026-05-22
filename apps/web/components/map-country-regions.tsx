@@ -63,9 +63,25 @@ interface CountryProperties {
   NAME?: string
   ISO_A2?: string
   ISO_A3?: string
+  ISO_A2_EH?: string
+  ISO_A3_EH?: string
+  WB_A2?: string
+  WB_A3?: string
+  ADM0_A3?: string
 }
 
 type CountryFeature = Feature<Geometry, CountryProperties>
+
+function cleanIso(...candidates: Array<string | undefined>): string | undefined {
+  for (const c of candidates) {
+    if (!c) continue
+    const v = c.trim()
+    if (!v) continue
+    if (v === "-99" || v === "-99.0") continue
+    return v
+  }
+  return undefined
+}
 
 const countryBase: PathOptions = {
   fillColor: "#c9a05c",
@@ -116,10 +132,13 @@ export function MapCountryRegions() {
   const onEachFeature = (feature: CountryFeature, layer: Layer) => {
     const props = feature.properties ?? {}
     const name = props.ADMIN ?? props.NAME ?? "Unknown"
-    const iso2 =
-      props.ISO_A2 && props.ISO_A2 !== "-99" ? props.ISO_A2 : undefined
-    const iso3 =
-      props.ISO_A3 && props.ISO_A3 !== "-99" ? props.ISO_A3 : undefined
+    const iso2 = cleanIso(props.ISO_A2, props.ISO_A2_EH, props.WB_A2)
+    const iso3 = cleanIso(
+      props.ISO_A3,
+      props.ISO_A3_EH,
+      props.WB_A3,
+      props.ADM0_A3
+    )
     const isSelected = () =>
       selected !== null &&
       selected.type === "country" &&

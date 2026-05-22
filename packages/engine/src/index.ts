@@ -30,6 +30,12 @@ export type {
   Economy,
   Government,
 } from "./country-stats"
+export { fetchCountryData } from "./country-data"
+export type {
+  FetchedCountryData,
+  FetchedValue,
+  FetchCountryDataOptions,
+} from "./country-data"
 export {
   EVENT_LIBRARY,
   getDueEvent,

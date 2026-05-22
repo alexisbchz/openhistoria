@@ -1,16 +1,8 @@
-// import { createOpenRouter } from "@openrouter/ai-sdk-provider"
-// import { generateObject } from "ai"
-import {
-  DeveloperMessageItem,
-  Gpt54Mini,
-  ModelContext,
-  ModelMessageItem,
-  OpenAIInferenceRunner,
-  UserMessageItem,
-} from "@mozaik-ai/core"
+import { createOpenRouter } from "@openrouter/ai-sdk-provider"
+import { generateObject } from "ai"
 import { z } from "zod"
 
-// const DEFAULT_MODEL = "poolside/laguna-m.1:free"
+const DEFAULT_MODEL = "openai/gpt-4o-mini"
 const NOMINATIM_USER_AGENT = "openhistoria-dev (https://github.com/openhistoria)"
 
 const projectKindEnum = z.enum([
@@ -95,9 +87,10 @@ async function geocode(query: string): Promise<GeocodeResult> {
 }
 
 export async function POST(req: Request) {
-  if (!process.env.OPENAI_API_KEY) {
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) {
     return Response.json(
-      { error: "OPENAI_API_KEY is not set" },
+      { error: "OPENROUTER_API_KEY is not set" },
       { status: 500 }
     )
   }
@@ -110,17 +103,6 @@ export async function POST(req: Request) {
 
   const { prompt, context } = parsed.data
 
-  // --- Vercel AI SDK version (commented out) ---
-  // const apiKey = process.env.OPENROUTER_API_KEY
-  // const openrouter = createOpenRouter({ apiKey })
-  // const model = openrouter.chat(process.env.OPENROUTER_MODEL ?? DEFAULT_MODEL)
-  // const { object } = await generateObject({
-  //   model,
-  //   schema: llmSchema,
-  //   system: ...,
-  //   prompt: ...,
-  // })
-
   const systemText = [
     "You are a strategy game assistant.",
     "The player governs a real-world nation and issues a decision they want to enact.",
@@ -130,8 +112,6 @@ export async function POST(req: Request) {
     "If the player names a city, use that exact city. If they only name a region,",
     "use the regional capital or most prominent city.",
     "Respond in the player's input language for name and description.",
-    "Return ONLY a single JSON object that matches this TypeScript type, with no markdown fences or commentary:",
-    '{ "name": string, "kind": "construction:nuclear"|"construction:industrial"|"construction:infrastructure"|"construction:military"|"construction:civilian"|"diplomacy"|"economic"|"other", "description": string, "expectedDurationDays": number, "location": { "label": string, "query": string } }',
   ].join(" ")
 
   const userText = [
@@ -140,36 +120,29 @@ export async function POST(req: Request) {
     `Decision: ${prompt}`,
   ].join("\n")
 
-  const modelContext = ModelContext.create("decide")
-    .addContextItem(DeveloperMessageItem.create(systemText))
-    .addContextItem(UserMessageItem.create(userText))
+  const openrouter = createOpenRouter({ apiKey })
+  const model = openrouter.chat(process.env.OPENROUTER_MODEL ?? DEFAULT_MODEL)
 
-  const runner = new OpenAIInferenceRunner()
-  const model = new Gpt54Mini()
-
-  let rawText = ""
-  for await (const item of runner.run(modelContext, model)) {
-    if (item instanceof ModelMessageItem) {
-      rawText += item.content.text
-    }
-  }
-
-  const jsonMatch = rawText.match(/\{[\s\S]*\}/)
-  if (!jsonMatch) {
+  let object: z.infer<typeof llmSchema>
+  try {
+    const result = await generateObject({
+      model,
+      schema: llmSchema,
+      system: systemText,
+      prompt: userText,
+    })
+    object = result.object
+  } catch (err) {
     return Response.json(
-      { error: "Model did not return JSON", raw: rawText },
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "OpenRouter inference failed",
+      },
       { status: 502 }
     )
   }
-
-  const objectResult = llmSchema.safeParse(JSON.parse(jsonMatch[0]))
-  if (!objectResult.success) {
-    return Response.json(
-      { error: objectResult.error.format(), raw: rawText },
-      { status: 502 }
-    )
-  }
-  const object = objectResult.data
 
   let coords: GeocodeResult
   try {

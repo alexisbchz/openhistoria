@@ -5,6 +5,7 @@ import "@workspace/ui/globals.css"
 import { GameProvider } from "@/components/game-provider"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@workspace/ui/components/sonner"
+import { TooltipProvider } from "@workspace/ui/components/tooltip"
 import { cn } from "@workspace/ui/lib/utils"
 
 export const metadata: Metadata = {
@@ -58,10 +59,12 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider>
-          <GameProvider>
-            {children}
-            <Toaster position="top-center" richColors closeButton />
-          </GameProvider>
+          <TooltipProvider>
+            <GameProvider>
+              {children}
+              <Toaster position="top-center" richColors closeButton />
+            </GameProvider>
+          </TooltipProvider>
         </ThemeProvider>
       </body>
     </html>
