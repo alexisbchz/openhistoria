@@ -1,8 +1,7 @@
 "use client"
 
-import { MapMarker } from "@workspace/ui/components/map"
+import { MapMarker, useMap, useMapEvents } from "@workspace/ui/components/map"
 import { useEffect, useState } from "react"
-import { useMap, useMapEvents } from "react-leaflet"
 
 import { useCountrySelection } from "@/components/map-country-regions"
 
@@ -205,8 +204,6 @@ export function MapCountryLabels() {
           <MapMarker
             key={country.name}
             position={country.center}
-            keyboard={false}
-            iconAnchor={[0, 0]}
             eventHandlers={{
               click: () => setSelected({ name: country.name }),
             }}
@@ -220,7 +217,6 @@ export function MapCountryLabels() {
                     : "oklch(0.92 0.05 85)",
                   textShadow:
                     "0 0 3px rgba(0,0,0,0.95), 0 1px 2px rgba(0,0,0,0.9), 0 0 8px rgba(0,0,0,0.6)",
-                  transform: "translate(-50%, -50%)",
                   letterSpacing: "0.12em",
                   background: isSelected
                     ? "color-mix(in oklch, var(--primary) 22%, transparent)"

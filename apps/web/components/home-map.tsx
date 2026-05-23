@@ -27,6 +27,28 @@ import { MapTextureOverlay } from "@/components/map-texture-overlay"
 import { ProjectMarkers } from "@/components/project-markers"
 import { TimeControls } from "@/components/time-controls"
 
+const ESRI_SATELLITE_URL =
+  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+const CARTO_LIGHT_URL =
+  "https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"
+
+function Basemap() {
+  const { basemap } = useMapLayers()
+  if (basemap === "satellite") {
+    return (
+      <MapTileLayer
+        url={ESRI_SATELLITE_URL}
+        maxNativeZoom={18}
+        brightness={0.78}
+        saturation={0.25}
+        contrast={0.05}
+        hueRotate={354}
+      />
+    )
+  }
+  return <MapTileLayer url={CARTO_LIGHT_URL} maxNativeZoom={19} />
+}
+
 function ConditionalMapLayers() {
   const { visible } = useMapLayers()
   return (
@@ -41,21 +63,10 @@ function ConditionalMapLayers() {
 
 export function HomeMap() {
   return (
-    <Map
-      center={[20, 0]}
-      zoom={3}
-      maxZoom={18}
-      className="h-svh w-full rounded-none [&_.map-satellite-tiles]:[filter:brightness(0.78)_saturate(1.25)_contrast(1.05)_hue-rotate(-6deg)]"
-    >
+    <Map center={[20, 0]} zoom={3} maxZoom={18} className="h-svh w-full">
       <MapLayersProvider>
         <CountrySelectionProvider>
-          <MapTileLayer
-            url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            darkUrl="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-            attribution='Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community'
-            maxNativeZoom={18}
-            className="map-satellite-tiles"
-          />
+          <Basemap />
           <ConditionalMapLayers />
           <MapTextureOverlay />
           <MapZoomControl position="top-2 right-2" />

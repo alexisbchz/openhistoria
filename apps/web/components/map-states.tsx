@@ -1,132 +1,206 @@
 "use client"
 
-import type { Feature, FeatureCollection, Geometry } from "geojson"
-import type { LeafletMouseEvent, PathOptions, Layer } from "leaflet"
-import dynamic from "next/dynamic"
-import { useEffect, useState } from "react"
-import { useMap, useMapEvents } from "react-leaflet"
+import { useMap, useMapEvents } from "@workspace/ui/components/map"
+import { useEffect, useRef, useState } from "react"
 
-import { useMapSelection } from "@/components/map-country-regions"
-
-const GeoJSON = dynamic(
-  () => import("react-leaflet").then((mod) => mod.GeoJSON),
-  { ssr: false }
-)
-
-interface RegionProperties {
-  name?: string
-  name_en?: string
-  admin?: string
-  iso_3166_2?: string
-}
-
-type RegionFeature = Feature<Geometry, RegionProperties>
-
-const base: PathOptions = {
-  fillColor: "#e8cf9c",
-  fillOpacity: 0,
-  color: "#e8cf9c",
-  weight: 1,
-  opacity: 0.55,
-  dashArray: "4 4",
-}
-
-const hover: PathOptions = {
-  fillColor: "#e8cf9c",
-  fillOpacity: 0.2,
-  color: "#f4dca8",
-  weight: 2,
-  opacity: 1,
-  dashArray: "0",
-}
-
-const selectedStyle: PathOptions = {
-  fillColor: "#f0d89c",
-  fillOpacity: 0.35,
-  color: "#f6df9a",
-  weight: 2.5,
-  opacity: 1,
-  dashArray: "0",
-}
+import {
+  ADM1_FILL_LAYER,
+  ADM1_STROKE_LAYER,
+  ADM1_SOURCE_LAYER,
+  GADM_SOURCE_ID,
+} from "@/components/map-gadm-source"
+import {
+  useGadmSource,
+  useMapSelection,
+} from "@/components/map-country-regions"
 
 const MIN_ZOOM_VISIBLE = 4
 
 export function MapStates() {
   const map = useMap()
-  const [zoom, setZoom] = useState(map.getZoom())
-  const [data, setData] = useState<FeatureCollection<
-    Geometry,
-    RegionProperties
-  > | null>(null)
+  const sourceReady = useGadmSource()
   const { selected, setSelected } = useMapSelection()
+  const [zoom, setZoom] = useState(() => map.getZoom())
+  const [layersReady, setLayersReady] = useState(false)
+  const hoveredIdRef = useRef<string | number | null>(null)
 
   useMapEvents({
     zoomend: () => setZoom(map.getZoom()),
   })
 
+  const enabled = sourceReady && zoom >= MIN_ZOOM_VISIBLE
+
   useEffect(() => {
-    if (zoom < MIN_ZOOM_VISIBLE) return
-    if (data) return
-    let cancelled = false
-    fetch("/data/regions-10m.geojson")
-      .then((r) => r.json())
-      .then((json: FeatureCollection<Geometry, RegionProperties>) => {
-        if (!cancelled) setData(json)
+    if (!enabled) return
+
+    if (!map.getLayer(ADM1_FILL_LAYER)) {
+      map.addLayer({
+        id: ADM1_FILL_LAYER,
+        type: "fill",
+        source: GADM_SOURCE_ID,
+        "source-layer": ADM1_SOURCE_LAYER,
+        minzoom: MIN_ZOOM_VISIBLE,
+        paint: {
+          "fill-color": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#f0d89c",
+            ["boolean", ["feature-state", "hover"], false],
+            "#e8cf9c",
+            "#e8cf9c",
+          ],
+          "fill-opacity": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            0.35,
+            ["boolean", ["feature-state", "hover"], false],
+            0.2,
+            0,
+          ],
+        },
       })
-      .catch(() => {})
-    return () => {
-      cancelled = true
     }
-  }, [zoom, data])
+    if (!map.getLayer(ADM1_STROKE_LAYER)) {
+      map.addLayer({
+        id: ADM1_STROKE_LAYER,
+        type: "line",
+        source: GADM_SOURCE_ID,
+        "source-layer": ADM1_SOURCE_LAYER,
+        minzoom: MIN_ZOOM_VISIBLE,
+        paint: {
+          "line-color": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#f6df9a",
+            ["boolean", ["feature-state", "hover"], false],
+            "#f4dca8",
+            "#e8cf9c",
+          ],
+          "line-width": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            2.5,
+            ["boolean", ["feature-state", "hover"], false],
+            2,
+            1,
+          ],
+          "line-opacity": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            1,
+            ["boolean", ["feature-state", "hover"], false],
+            1,
+            0.55,
+          ],
+          "line-dasharray": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            ["literal", [1]],
+            ["boolean", ["feature-state", "hover"], false],
+            ["literal", [1]],
+            ["literal", [4, 4]],
+          ],
+        },
+      })
+    }
+    setLayersReady(true)
 
-  if (zoom < MIN_ZOOM_VISIBLE || !data) return null
+    return () => {
+      if (map.getLayer(ADM1_STROKE_LAYER)) map.removeLayer(ADM1_STROKE_LAYER)
+      if (map.getLayer(ADM1_FILL_LAYER)) map.removeLayer(ADM1_FILL_LAYER)
+      setLayersReady(false)
+    }
+  }, [map, enabled])
 
-  const onEachFeature = (feature: RegionFeature, layer: Layer) => {
-    const props = feature.properties ?? {}
-    const name = props.name_en ?? props.name ?? "Unknown"
-    const country = props.admin ?? "Unknown"
-    const isSelected = () =>
-      selected !== null &&
-      selected.type === "region" &&
-      selected.name === name &&
-      selected.country === country
-    const pathLayer = layer as L.Path
+  useEffect(() => {
+    if (!layersReady) return
 
-    layer.on({
-      mouseover: () => {
-        if (!isSelected()) pathLayer.setStyle(hover)
-      },
-      mouseout: () => {
-        if (!isSelected()) pathLayer.setStyle(base)
-      },
-      click: (event: LeafletMouseEvent) => {
-        setSelected({ type: "region", name, country })
-        event.originalEvent.stopPropagation()
-      },
-    })
-  }
+    const handleClick = (event: maplibregl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(event.point, {
+        layers: [ADM1_FILL_LAYER],
+      })
+      const feature = features[0]
+      if (!feature) return
+      const props = feature.properties as Record<string, unknown>
+      const name =
+        (props.NAME_1 as string | undefined) ??
+        (props.VARNAME_1 as string | undefined) ??
+        "Unknown"
+      const country =
+        (props.NAME_0 as string | undefined) ??
+        (props.COUNTRY as string | undefined) ??
+        "Unknown"
+      const gid = props.GID_1 as string | undefined
+      setSelected({ type: "region", name, country, gid })
+    }
 
-  return (
-    <GeoJSON
-      data={data}
-      style={(feature) => {
-        if (!feature) return base
-        const props = feature.properties as RegionProperties
-        const name = props.name_en ?? props.name
-        const country = props.admin
-        return selected &&
-          selected.type === "region" &&
-          selected.name === name &&
-          selected.country === country
-          ? selectedStyle
-          : base
-      }}
-      onEachFeature={onEachFeature}
-      key={
-        selected?.type === "region"
-          ? `${selected.country}/${selected.name}`
-          : "none"
+    const handleMouseMove = (event: maplibregl.MapLayerMouseEvent) => {
+      const feature = event.features?.[0]
+      if (!feature || feature.id == null) return
+      if (hoveredIdRef.current === feature.id) return
+      if (hoveredIdRef.current != null) {
+        map.setFeatureState(
+          {
+            source: GADM_SOURCE_ID,
+            sourceLayer: ADM1_SOURCE_LAYER,
+            id: hoveredIdRef.current,
+          },
+          { hover: false }
+        )
       }
-    />
-  )
+      map.setFeatureState(
+        {
+          source: GADM_SOURCE_ID,
+          sourceLayer: ADM1_SOURCE_LAYER,
+          id: feature.id,
+        },
+        { hover: true }
+      )
+      hoveredIdRef.current = feature.id
+      map.getCanvas().style.cursor = "pointer"
+    }
+
+    const handleMouseLeave = () => {
+      if (hoveredIdRef.current != null) {
+        map.setFeatureState(
+          {
+            source: GADM_SOURCE_ID,
+            sourceLayer: ADM1_SOURCE_LAYER,
+            id: hoveredIdRef.current,
+          },
+          { hover: false }
+        )
+        hoveredIdRef.current = null
+      }
+      map.getCanvas().style.cursor = ""
+    }
+
+    map.on("click", ADM1_FILL_LAYER, handleClick)
+    map.on("mousemove", ADM1_FILL_LAYER, handleMouseMove)
+    map.on("mouseleave", ADM1_FILL_LAYER, handleMouseLeave)
+
+    return () => {
+      map.off("click", ADM1_FILL_LAYER, handleClick)
+      map.off("mousemove", ADM1_FILL_LAYER, handleMouseMove)
+      map.off("mouseleave", ADM1_FILL_LAYER, handleMouseLeave)
+    }
+  }, [map, layersReady, setSelected])
+
+  useEffect(() => {
+    if (!layersReady) return
+    if (selected?.type !== "region" || !selected.gid) return
+    const id = selected.gid
+    map.setFeatureState(
+      { source: GADM_SOURCE_ID, sourceLayer: ADM1_SOURCE_LAYER, id },
+      { selected: true }
+    )
+    return () => {
+      map.setFeatureState(
+        { source: GADM_SOURCE_ID, sourceLayer: ADM1_SOURCE_LAYER, id },
+        { selected: false }
+      )
+    }
+  }, [map, layersReady, selected])
+
+  return null
 }

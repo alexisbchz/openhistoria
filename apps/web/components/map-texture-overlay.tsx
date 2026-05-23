@@ -1,6 +1,6 @@
 "use client"
 
-import { useMap } from "react-leaflet"
+import { useMap } from "@workspace/ui/components/map"
 import { createPortal } from "react-dom"
 
 export function MapTextureOverlay() {

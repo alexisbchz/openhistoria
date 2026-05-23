@@ -1,11 +1,11 @@
 "use client"
 
+import { useMap } from "@workspace/ui/components/map"
 import {
   PlaceAutocomplete,
   type PlaceFeature,
 } from "@workspace/ui/components/place-autocomplete"
 import { SearchIcon } from "lucide-react"
-import { useMap } from "react-leaflet"
 
 import { FloatingPanel } from "@/components/floating-panel"
 import { useHudState } from "@/components/hud-state"
@@ -17,7 +17,7 @@ export function PlaceSearchPanel() {
   function handleSelect(feature: PlaceFeature) {
     const [lon, lat] = feature.geometry.coordinates as [number, number]
     const targetZoom = Math.max(map.getZoom(), 8)
-    map.flyTo([lat, lon], targetZoom, { duration: 0.8 })
+    map.flyTo({ center: [lon, lat], zoom: targetZoom, duration: 800 })
     closeSearch()
   }
 

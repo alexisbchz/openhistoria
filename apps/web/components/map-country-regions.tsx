@@ -1,22 +1,25 @@
 "use client"
 
-import { MapControlContainer } from "@workspace/ui/components/map"
+import {
+  MapControlContainer,
+  useMap,
+} from "@workspace/ui/components/map"
 import { Button } from "@workspace/ui/components/button"
-import type { Feature, FeatureCollection, Geometry } from "geojson"
-import type { LeafletMouseEvent, PathOptions, Layer } from "leaflet"
 import { XIcon } from "lucide-react"
-import dynamic from "next/dynamic"
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { createContext, useContext } from "react"
 
-const GeoJSON = dynamic(
-  () => import("react-leaflet").then((mod) => mod.GeoJSON),
-  { ssr: false }
-)
+import {
+  ADM0_FILL_LAYER,
+  ADM0_STROKE_LAYER,
+  ADM0_SOURCE_LAYER,
+  GADM_SOURCE_ID,
+  gadmSourceSpec,
+} from "@/components/map-gadm-source"
 
 export type MapSelection =
   | { type: "country"; name: string; iso2?: string; iso3?: string }
-  | { type: "region"; name: string; country: string }
+  | { type: "region"; name: string; country: string; gid?: string }
   | { type: "city"; name: string; country: string; population?: number }
 
 interface MapSelectionContextValue {
@@ -58,125 +61,191 @@ export const useCountrySelection = (): {
   }
 }
 
-interface CountryProperties {
-  ADMIN?: string
-  NAME?: string
-  ISO_A2?: string
-  ISO_A3?: string
-  ISO_A2_EH?: string
-  ISO_A3_EH?: string
-  WB_A2?: string
-  WB_A3?: string
-  ADM0_A3?: string
-}
+/**
+ * Add the shared GADM PMTiles source to the map exactly once, no matter how
+ * many layers reference it. Returns true once the source is registered so
+ * dependent layers know it's safe to mount.
+ */
+export function useGadmSource(): boolean {
+  const map = useMap()
+  const [ready, setReady] = useState(() => Boolean(map.getSource(GADM_SOURCE_ID)))
 
-type CountryFeature = Feature<Geometry, CountryProperties>
+  useEffect(() => {
+    if (!map.getSource(GADM_SOURCE_ID)) {
+      map.addSource(GADM_SOURCE_ID, gadmSourceSpec)
+    }
+    setReady(true)
+    // The source is shared across components; leave it in place on unmount.
+  }, [map])
 
-function cleanIso(...candidates: Array<string | undefined>): string | undefined {
-  for (const c of candidates) {
-    if (!c) continue
-    const v = c.trim()
-    if (!v) continue
-    if (v === "-99" || v === "-99.0") continue
-    return v
-  }
-  return undefined
-}
-
-const countryBase: PathOptions = {
-  fillColor: "#c9a05c",
-  fillOpacity: 0,
-  color: "#c9a05c",
-  weight: 0,
-  opacity: 0,
-}
-
-const countryHover: PathOptions = {
-  fillColor: "#e8cf9c",
-  fillOpacity: 0.12,
-  color: "#e8cf9c",
-  weight: 1,
-  opacity: 0.7,
-}
-
-const countrySelected: PathOptions = {
-  fillColor: "#e8cf9c",
-  fillOpacity: 0.22,
-  color: "#f0d89c",
-  weight: 2,
-  opacity: 1,
+  return ready
 }
 
 export function MapCountryRegions() {
-  const [data, setData] = useState<FeatureCollection<
-    Geometry,
-    CountryProperties
-  > | null>(null)
+  const map = useMap()
   const { selected, setSelected } = useMapSelection()
+  const sourceReady = useGadmSource()
+  const [layersReady, setLayersReady] = useState(false)
+  const hoveredIdRef = useRef<string | number | null>(null)
 
   useEffect(() => {
-    let cancelled = false
-    fetch("/data/countries-110m.geojson")
-      .then((r) => r.json())
-      .then((json: FeatureCollection<Geometry, CountryProperties>) => {
-        if (!cancelled) setData(json)
+    if (!sourceReady) return
+
+    if (!map.getLayer(ADM0_FILL_LAYER)) {
+      map.addLayer({
+        id: ADM0_FILL_LAYER,
+        type: "fill",
+        source: GADM_SOURCE_ID,
+        "source-layer": ADM0_SOURCE_LAYER,
+        paint: {
+          "fill-color": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#e8cf9c",
+            ["boolean", ["feature-state", "hover"], false],
+            "#e8cf9c",
+            "#c9a05c",
+          ],
+          "fill-opacity": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            0.22,
+            ["boolean", ["feature-state", "hover"], false],
+            0.12,
+            0,
+          ],
+        },
       })
-      .catch(() => {})
-    return () => {
-      cancelled = true
     }
-  }, [])
+    if (!map.getLayer(ADM0_STROKE_LAYER)) {
+      map.addLayer({
+        id: ADM0_STROKE_LAYER,
+        type: "line",
+        source: GADM_SOURCE_ID,
+        "source-layer": ADM0_SOURCE_LAYER,
+        paint: {
+          "line-color": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            "#f0d89c",
+            "#e8cf9c",
+          ],
+          "line-width": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            2,
+            ["boolean", ["feature-state", "hover"], false],
+            1,
+            0,
+          ],
+          "line-opacity": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            1,
+            ["boolean", ["feature-state", "hover"], false],
+            0.7,
+            0,
+          ],
+        },
+      })
+    }
+    setLayersReady(true)
 
-  if (!data) return null
+    return () => {
+      if (map.getLayer(ADM0_STROKE_LAYER)) map.removeLayer(ADM0_STROKE_LAYER)
+      if (map.getLayer(ADM0_FILL_LAYER)) map.removeLayer(ADM0_FILL_LAYER)
+      setLayersReady(false)
+    }
+  }, [map, sourceReady])
 
-  const onEachFeature = (feature: CountryFeature, layer: Layer) => {
-    const props = feature.properties ?? {}
-    const name = props.ADMIN ?? props.NAME ?? "Unknown"
-    const iso2 = cleanIso(props.ISO_A2, props.ISO_A2_EH, props.WB_A2)
-    const iso3 = cleanIso(
-      props.ISO_A3,
-      props.ISO_A3_EH,
-      props.WB_A3,
-      props.ADM0_A3
+  useEffect(() => {
+    if (!layersReady) return
+
+    const handleClick = (event: maplibregl.MapMouseEvent) => {
+      const features = map.queryRenderedFeatures(event.point, {
+        layers: [ADM0_FILL_LAYER],
+      })
+      const feature = features[0]
+      if (!feature) return
+      const props = feature.properties as Record<string, unknown>
+      const name =
+        (props.NAME_0 as string | undefined) ??
+        (props.COUNTRY as string | undefined) ??
+        "Unknown"
+      const iso3 = props.GID_0 as string | undefined
+      setSelected({ type: "country", name, iso3 })
+    }
+
+    const handleMouseMove = (event: maplibregl.MapLayerMouseEvent) => {
+      const feature = event.features?.[0]
+      if (!feature || feature.id == null) return
+      if (hoveredIdRef.current === feature.id) return
+      if (hoveredIdRef.current != null) {
+        map.setFeatureState(
+          {
+            source: GADM_SOURCE_ID,
+            sourceLayer: ADM0_SOURCE_LAYER,
+            id: hoveredIdRef.current,
+          },
+          { hover: false }
+        )
+      }
+      map.setFeatureState(
+        {
+          source: GADM_SOURCE_ID,
+          sourceLayer: ADM0_SOURCE_LAYER,
+          id: feature.id,
+        },
+        { hover: true }
+      )
+      hoveredIdRef.current = feature.id
+      map.getCanvas().style.cursor = "pointer"
+    }
+
+    const handleMouseLeave = () => {
+      if (hoveredIdRef.current != null) {
+        map.setFeatureState(
+          {
+            source: GADM_SOURCE_ID,
+            sourceLayer: ADM0_SOURCE_LAYER,
+            id: hoveredIdRef.current,
+          },
+          { hover: false }
+        )
+        hoveredIdRef.current = null
+      }
+      map.getCanvas().style.cursor = ""
+    }
+
+    map.on("click", ADM0_FILL_LAYER, handleClick)
+    map.on("mousemove", ADM0_FILL_LAYER, handleMouseMove)
+    map.on("mouseleave", ADM0_FILL_LAYER, handleMouseLeave)
+
+    return () => {
+      map.off("click", ADM0_FILL_LAYER, handleClick)
+      map.off("mousemove", ADM0_FILL_LAYER, handleMouseMove)
+      map.off("mouseleave", ADM0_FILL_LAYER, handleMouseLeave)
+    }
+  }, [map, layersReady, setSelected])
+
+  // Reflect the current selection in feature-state so the polygon highlights.
+  useEffect(() => {
+    if (!layersReady) return
+    if (selected?.type !== "country" || !selected.iso3) return
+    const id = selected.iso3
+    map.setFeatureState(
+      { source: GADM_SOURCE_ID, sourceLayer: ADM0_SOURCE_LAYER, id },
+      { selected: true }
     )
-    const isSelected = () =>
-      selected !== null &&
-      selected.type === "country" &&
-      selected.name === name
-    const pathLayer = layer as L.Path
+    return () => {
+      map.setFeatureState(
+        { source: GADM_SOURCE_ID, sourceLayer: ADM0_SOURCE_LAYER, id },
+        { selected: false }
+      )
+    }
+  }, [map, layersReady, selected])
 
-    layer.on({
-      mouseover: () => {
-        if (!isSelected()) pathLayer.setStyle(countryHover)
-      },
-      mouseout: () => {
-        if (!isSelected()) pathLayer.setStyle(countryBase)
-      },
-      click: (event: LeafletMouseEvent) => {
-        setSelected({ type: "country", name, iso2, iso3 })
-        event.originalEvent.stopPropagation()
-      },
-    })
-  }
-
-  return (
-    <GeoJSON
-      data={data}
-      style={(feature) => {
-        if (!feature) return countryBase
-        const name =
-          (feature.properties as CountryProperties).ADMIN ??
-          (feature.properties as CountryProperties).NAME
-        return selected &&
-          selected.type === "country" &&
-          selected.name === name
-          ? countrySelected
-          : countryBase
-      }}
-      onEachFeature={onEachFeature}
-      key={selected?.type === "country" ? selected.name : "none"}
-    />
-  )
+  return null
 }
 
 function selectionLabel(selected: MapSelection): {

@@ -1,9 +1,8 @@
 "use client"
 
-import { MapMarker } from "@workspace/ui/components/map"
+import { MapMarker, useMap, useMapEvents } from "@workspace/ui/components/map"
 import type { Feature, FeatureCollection, Point } from "geojson"
 import { useEffect, useState } from "react"
-import { useMap, useMapEvents } from "react-leaflet"
 
 import { useMapSelection } from "@/components/map-country-regions"
 
@@ -54,10 +53,27 @@ function fontSizeForZoom(zoom: number): number {
   return 12
 }
 
+interface Viewport {
+  south: number
+  north: number
+  west: number
+  east: number
+}
+
+function readViewport(map: maplibregl.Map): Viewport {
+  const b = map.getBounds()
+  return {
+    south: b.getSouth(),
+    north: b.getNorth(),
+    west: b.getWest(),
+    east: b.getEast(),
+  }
+}
+
 export function MapCities() {
   const map = useMap()
   const [zoom, setZoom] = useState(map.getZoom())
-  const [bounds, setBounds] = useState(() => map.getBounds())
+  const [viewport, setViewport] = useState<Viewport>(() => readViewport(map))
   const [data, setData] = useState<FeatureCollection<
     Point,
     CityProperties
@@ -67,9 +83,9 @@ export function MapCities() {
   useMapEvents({
     zoomend: () => {
       setZoom(map.getZoom())
-      setBounds(map.getBounds())
+      setViewport(readViewport(map))
     },
-    moveend: () => setBounds(map.getBounds()),
+    moveend: () => setViewport(readViewport(map)),
   })
 
   useEffect(() => {
@@ -93,12 +109,9 @@ export function MapCities() {
   // At higher zooms our dataset is large; clip to viewport so we don't try to
   // render thousands of markers offscreen.
   const clipToViewport = zoom >= 4
-  const south = bounds.getSouth()
-  const north = bounds.getNorth()
-  const west = bounds.getWest()
-  const east = bounds.getEast()
+  const { south, north, west, east } = viewport
   const wrapsAntimeridian = west > east
-  const visible = data.features.filter((f) => {
+  const visible = data.features.filter((f: CityFeature) => {
     const r = f.properties?.SCALERANK ?? 99
     if (r > maxDotRank) return false
     if (!clipToViewport) return true
@@ -132,7 +145,6 @@ export function MapCities() {
           <MapMarker
             key={`${country}/${name}/${coords[0]},${coords[1]}`}
             position={position}
-            iconAnchor={[0, 0]}
             eventHandlers={{
               click: () =>
                 setSelected({
@@ -146,7 +158,6 @@ export function MapCities() {
               <div
                 className="cursor-pointer transition-transform hover:scale-110"
                 style={{
-                  transform: "translate(-50%, -50%)",
                   display: "flex",
                   alignItems: "center",
                   gap: "4px",

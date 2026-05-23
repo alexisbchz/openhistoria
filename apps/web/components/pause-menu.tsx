@@ -9,9 +9,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@workspace/ui/components/dialog"
+import { useMap, useMapEvents } from "@workspace/ui/components/map"
 import { BugIcon, CheckIcon, CopyIcon } from "lucide-react"
 import { useEffect, useState } from "react"
-import { useMap, useMapEvents } from "react-leaflet"
 
 import { useGame, useGameActions } from "@/components/game-provider"
 import { useHudState } from "@/components/hud-state"
@@ -99,7 +99,7 @@ function readMapSnapshot(map: ReturnType<typeof useMap>): MapSnapshot {
   const c = map.getCenter()
   const b = map.getBounds()
   return {
-    zoom: map.getZoom(),
+    zoom: round(map.getZoom(), 3),
     center: { lat: round(c.lat, 4), lng: round(c.lng, 4) },
     bounds: {
       south: round(b.getSouth(), 4),

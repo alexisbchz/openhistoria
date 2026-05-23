@@ -10,11 +10,14 @@ import {
 } from "react"
 
 export type MapLayerKey = "countries" | "regions" | "cities"
+export type Basemap = "satellite" | "map"
 
 interface MapLayersValue {
   visible: Record<MapLayerKey, boolean>
   toggle: (key: MapLayerKey) => void
   set: (key: MapLayerKey, value: boolean) => void
+  basemap: Basemap
+  setBasemap: (value: Basemap) => void
 }
 
 const MapLayersContext = createContext<MapLayersValue | null>(null)
@@ -27,6 +30,7 @@ const DEFAULTS: Record<MapLayerKey, boolean> = {
 
 export function MapLayersProvider({ children }: { children: ReactNode }) {
   const [visible, setVisible] = useState<Record<MapLayerKey, boolean>>(DEFAULTS)
+  const [basemap, setBasemap] = useState<Basemap>("satellite")
 
   const toggle = useCallback((key: MapLayerKey) => {
     setVisible((v) => ({ ...v, [key]: !v[key] }))
@@ -37,8 +41,8 @@ export function MapLayersProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const value = useMemo<MapLayersValue>(
-    () => ({ visible, toggle, set }),
-    [visible, toggle, set]
+    () => ({ visible, toggle, set, basemap, setBasemap }),
+    [visible, toggle, set, basemap]
   )
 
   return (

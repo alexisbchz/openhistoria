@@ -40,33 +40,6 @@ export function FloatingPanel({
     if (open) setZ(++topZ)
   }, [open])
 
-  // Tell Leaflet to ignore drag / scroll events on this element. We can't just
-  // call e.stopPropagation() on every event — that would block React's
-  // root-level event delegation and break clicks inside the panel (e.g. the
-  // autocomplete result list). Leaflet's helpers only stop mousedown /
-  // touchstart / dblclick / contextmenu / wheel, leaving click intact for
-  // React to handle.
-  useEffect(() => {
-    const el = panelRef.current
-    if (!el || !open) return
-    let cancelled = false
-    let cleanup: (() => void) | null = null
-    import("leaflet").then((mod) => {
-      if (cancelled) return
-      const L = mod.default
-      L.DomEvent.disableClickPropagation(el)
-      L.DomEvent.disableScrollPropagation(el)
-      // Leaflet doesn't expose a removal API for these; the handlers stay
-      // attached for the element's lifetime, which is fine since the panel
-      // unmounts when fully closed.
-      cleanup = () => {}
-    })
-    return () => {
-      cancelled = true
-      cleanup?.()
-    }
-  }, [open])
-
   function bringToFront() {
     if (z < topZ) setZ(++topZ)
   }
