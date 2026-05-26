@@ -15,6 +15,10 @@ import {
   getProjectProgress,
   type Project,
 } from "./projects"
+import {
+  computeProjectReactions,
+  simulateAiTick,
+} from "./ai-nations"
 
 export type NationCode = "FR"
 export type CharacterId = "macron"
@@ -236,7 +240,32 @@ export class Game {
       return this
     }
     const treasury = this.treasury - project.upfrontCost
-    const briefing = pushTo(this.briefing, makeBriefing(this.date, {
+
+    const reactions = computeProjectReactions(
+      project.kind,
+      project.name,
+      this.nation
+    )
+    let relations = this.relations
+    let briefing = this.briefing
+    for (const reaction of reactions) {
+      const current = relations[reaction.code] ?? DEFAULT_RELATION
+      relations = {
+        ...relations,
+        [reaction.code]: {
+          ...current,
+          opinion: clampOpinion(current.opinion + reaction.opinionDelta),
+          lastInteractionAt: this.date.toISOString(),
+        },
+      }
+      briefing = pushTo(briefing, makeBriefing(this.date, {
+        kind: reaction.opinionDelta >= 0 ? "milestone" : "warning",
+        title: reaction.briefingTitle,
+        detail: `Opinion ${formatSigned(reaction.opinionDelta)} (${reaction.code})`,
+      }))
+    }
+
+    briefing = pushTo(briefing, makeBriefing(this.date, {
       kind: "project_started",
       title: `Scheduled: ${project.name}`,
       detail: `${project.location.label} · €${project.upfrontCost}M upfront · ~${project.expectedDurationDays}d`,
@@ -245,6 +274,7 @@ export class Game {
       projects: [...this.projects, project],
       treasury,
       briefing,
+      relations,
     })
   }
 
@@ -448,6 +478,20 @@ export class Game {
       }
     }
 
+    const ai = simulateAiTick({
+      days,
+      playerNation: this.nation,
+      relations: this.relations,
+      currentDate: newDate,
+    })
+    for (const action of ai.actions) {
+      briefing = pushTo(briefing, makeBriefing(newDate, {
+        kind: action.briefingKind,
+        title: action.briefingTitle,
+        detail: action.briefingDetail,
+      }))
+    }
+
     return this.with({
       date: newDate,
       treasury,
@@ -457,6 +501,7 @@ export class Game {
       briefing,
       pendingEvent,
       paused: pendingEvent ? true : this.paused,
+      relations: ai.relations,
     })
   }
 

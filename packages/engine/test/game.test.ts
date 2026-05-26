@@ -88,6 +88,22 @@ describe("Game.addProject", () => {
     expect(next).toBe(game)
   })
 
+  it("keeps project_started at briefing[0] even when AI nations react", () => {
+    // construction:nuclear triggers reactions from several AI nations.
+    // project_started must remain the most recent entry the player sees.
+    const game = freshGame()
+    const project = makeProject({
+      kind: "construction:nuclear",
+      name: "Pluton II reactor",
+      expectedDurationDays: 365,
+    })
+    const next = game.addProject(project)
+    expect(next.briefing[0]?.kind).toBe("project_started")
+    expect(next.briefing[0]?.title).toContain("Pluton II")
+    // And at least one reaction briefing landed behind it.
+    expect(next.briefing.slice(1).some((b) => b.kind === "warning")).toBe(true)
+  })
+
   it("ignores additions after game over", () => {
     const game = freshGame().with({
       gameOver: { outcome: "lost", reason: "test", date: "2027-04-25T00:00:00.000Z" },

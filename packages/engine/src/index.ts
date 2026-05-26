@@ -72,3 +72,17 @@ export {
   PROJECT_KIND_LABELS,
 } from "./decision-suggestions"
 export type { DecisionSuggestion } from "./decision-suggestions"
+export {
+  AI_NATIONS,
+  computeProjectReactions,
+  getAiProfile,
+  simulateAiTick,
+} from "./ai-nations"
+export type {
+  AiAction,
+  AiNationProfile,
+  AiStance,
+  AiTickInput,
+  AiTickResult,
+  ProjectReaction,
+} from "./ai-nations"
