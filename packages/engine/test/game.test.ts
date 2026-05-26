@@ -245,6 +245,81 @@ describe("Game.mediaTour", () => {
   })
 })
 
+describe("Game diplomacy", () => {
+  it("getRelation returns a default state when no record exists", () => {
+    const game = freshGame()
+    const rel = game.getRelation("GB")
+    expect(rel.opinion).toBe(0)
+    expect(rel.allied).toBe(false)
+    expect(rel.lastInteractionAt).toBeNull()
+  })
+
+  it("proposeAlliance sets allied + opinion floor and logs a briefing", () => {
+    const game = freshGame()
+    const next = game.proposeAlliance("GB")
+    const rel = next.getRelation("GB")
+    expect(rel.allied).toBe(true)
+    expect(rel.opinion).toBeGreaterThanOrEqual(50)
+    expect(rel.lastInteractionAt).not.toBeNull()
+    expect(next.briefing[0]?.kind).toBe("milestone")
+    expect(next.briefing[0]?.title).toContain("GB")
+  })
+
+  it("proposeAlliance normalizes the key to uppercase", () => {
+    const game = freshGame().proposeAlliance("gb")
+    expect(game.getRelation("GB").allied).toBe(true)
+    expect(game.getRelation("gb").allied).toBe(true)
+  })
+
+  it("proposeAlliance is a no-op against the player's own nation", () => {
+    const game = freshGame()
+    expect(game.proposeAlliance("FR")).toBe(game)
+  })
+
+  it("proposeAlliance is a no-op when already allied", () => {
+    const first = freshGame().proposeAlliance("GB")
+    expect(first.proposeAlliance("GB")).toBe(first)
+  })
+
+  it("breakAlliance flips allied, drops opinion, and logs a warning", () => {
+    const allied = freshGame().proposeAlliance("GB")
+    const broken = allied.breakAlliance("GB")
+    const rel = broken.getRelation("GB")
+    expect(rel.allied).toBe(false)
+    expect(rel.opinion).toBeLessThan(allied.getRelation("GB").opinion)
+    expect(broken.briefing[0]?.kind).toBe("warning")
+  })
+
+  it("breakAlliance is a no-op when not allied", () => {
+    const game = freshGame()
+    expect(game.breakAlliance("GB")).toBe(game)
+  })
+
+  it("breakAlliance is a no-op against the player's own nation", () => {
+    const game = freshGame()
+    expect(game.breakAlliance("FR")).toBe(game)
+    expect(game.breakAlliance("fr")).toBe(game)
+  })
+
+  it("sendDiplomaticMessage is a no-op against the player's own nation", () => {
+    const game = freshGame()
+    const same = game.sendDiplomaticMessage({
+      target: "FR",
+      opinionDelta: 10,
+      briefingTitle: "self note",
+    })
+    expect(same).toBe(game)
+  })
+
+  it("ignores alliance actions after game over", () => {
+    const game = freshGame().with({
+      gameOver: { outcome: "lost", reason: "test", date: "2027-04-25T00:00:00.000Z" },
+    })
+    expect(game.proposeAlliance("GB")).toBe(game)
+    expect(game.breakAlliance("GB")).toBe(game)
+  })
+})
+
 describe("Snapshot round-trip", () => {
   it("toSnapshot + fromSnapshot preserves identity", () => {
     const game = freshGame().with({ paused: false, treasury: 1234 })
@@ -253,6 +328,40 @@ describe("Snapshot round-trip", () => {
     expect(round.treasury).toBe(game.treasury)
     expect(round.approval).toBe(game.approval)
     expect(round.date.toISOString()).toBe(game.date.toISOString())
+  })
+
+  it("round-trips relations through a snapshot", () => {
+    const game = freshGame().proposeAlliance("GB")
+    const snapshot = game.toSnapshot()
+    expect(snapshot.version).toBe(4)
+    expect(snapshot.relations["GB"]?.allied).toBe(true)
+    const round = Game.fromSnapshot(snapshot)
+    expect(round.getRelation("GB").allied).toBe(true)
+  })
+
+  it("migrates v3 snapshots by seeding empty relations", () => {
+    const v3 = {
+      version: 3 as const,
+      nation: "FR" as const,
+      character: "macron" as const,
+      date: "2026-06-01T00:00:00.000Z",
+      startedAt: "2026-05-21T00:00:00.000Z",
+      speed: 1 as const,
+      paused: true,
+      projects: [],
+      treasury: 100,
+      approval: 40,
+      stats: freshGame().stats,
+      triggeredEvents: [],
+      pendingEvent: null,
+      briefing: [],
+      gameOver: null,
+    }
+    const migrated = Game.fromSnapshot(v3)
+    expect(migrated.relations).toEqual({})
+    expect(migrated.getRelation("GB").allied).toBe(false)
+    // After mutation the snapshot bumps to v4.
+    expect(migrated.proposeAlliance("GB").toSnapshot().version).toBe(4)
   })
 
   it("migrates v1 snapshots by seeding fresh treasury and stats", () => {

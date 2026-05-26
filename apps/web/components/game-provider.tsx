@@ -6,6 +6,7 @@ import {
   clearGame,
   loadGame,
   saveGame,
+  type DiplomaticMessageArgs,
   type GameSpeed,
   type Project,
 } from "@workspace/engine"
@@ -28,6 +29,9 @@ interface GameActions {
   cancelProject: (id: string) => void
   issueBond: (amountMillions: number) => void
   mediaTour: () => void
+  proposeAlliance: (target: string) => void
+  breakAlliance: (target: string) => void
+  sendDiplomaticMessage: (args: DiplomaticMessageArgs) => void
   resolveEventChoice: (eventId: string, choiceId: string) => void
   resetGame: () => void
 }
@@ -46,6 +50,9 @@ const noopActions: GameActions = {
   cancelProject: () => {},
   issueBond: () => {},
   mediaTour: () => {},
+  proposeAlliance: () => {},
+  breakAlliance: () => {},
+  sendDiplomaticMessage: () => {},
   resolveEventChoice: () => {},
   resetGame: () => {},
 }
@@ -145,6 +152,36 @@ export function GameProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
+  const proposeAlliance = useCallback((target: string) => {
+    setGame((current) => {
+      if (!current) return current
+      const next = current.proposeAlliance(target)
+      saveGame(next)
+      return next
+    })
+  }, [])
+
+  const breakAlliance = useCallback((target: string) => {
+    setGame((current) => {
+      if (!current) return current
+      const next = current.breakAlliance(target)
+      saveGame(next)
+      return next
+    })
+  }, [])
+
+  const sendDiplomaticMessage = useCallback(
+    (args: DiplomaticMessageArgs) => {
+      setGame((current) => {
+        if (!current) return current
+        const next = current.sendDiplomaticMessage(args)
+        saveGame(next)
+        return next
+      })
+    },
+    []
+  )
+
   const resolveEventChoice = useCallback(
     (eventId: string, choiceId: string) => {
       setGame((current) => {
@@ -193,6 +230,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
         cancelProject,
         issueBond,
         mediaTour,
+        proposeAlliance,
+        breakAlliance,
+        sendDiplomaticMessage,
         resolveEventChoice,
         resetGame,
       },
@@ -207,6 +247,9 @@ export function GameProvider({ children }: { children: ReactNode }) {
       cancelProject,
       issueBond,
       mediaTour,
+      proposeAlliance,
+      breakAlliance,
+      sendDiplomaticMessage,
       resolveEventChoice,
       resetGame,
     ]

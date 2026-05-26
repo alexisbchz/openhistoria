@@ -249,6 +249,13 @@ interface MapMarkerProps {
   icon?: ReactNode
   anchor?: maplibregl.PositionAnchor
   className?: string
+  /**
+   * Stacking order against other markers. Maplibre stacks markers purely by
+   * DOM insertion order, which means re-mounted markers (e.g. cities updating
+   * on every pan) end up on top of stable ones. Set a higher value to keep a
+   * marker on top regardless of insertion order.
+   */
+  zIndex?: number
   /** Optional click handler on the marker element. */
   eventHandlers?: { click?: (event: MouseEvent) => void }
   children?: ReactNode
@@ -263,6 +270,7 @@ export function MapMarker({
   icon,
   anchor = "center",
   className,
+  zIndex,
   eventHandlers,
   children,
 }: MapMarkerProps) {
@@ -281,6 +289,14 @@ export function MapMarker({
   useEffect(() => {
     if (className) element.className = className
   }, [className, element])
+
+  useEffect(() => {
+    if (zIndex == null) {
+      element.style.zIndex = ""
+    } else {
+      element.style.zIndex = String(zIndex)
+    }
+  }, [zIndex, element])
 
   useEffect(() => {
     const m = new maplibregl.Marker({ element, anchor })

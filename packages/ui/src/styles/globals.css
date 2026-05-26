@@ -177,4 +177,31 @@
   .marker-cluster div {
     @apply font-[inherit];
     }
+
+  /* MapLibre popup + tooltip theming. The library ships with hard-coded white
+     backgrounds; override with the popover token so dark mode renders correctly. */
+  .maplibregl-popup-content {
+    @apply !bg-popover !text-popover-foreground !rounded-md !border !border-border !shadow-md;
+    }
+  .maplibregl-popup-anchor-bottom .maplibregl-popup-tip {
+    @apply !border-t-popover;
+    }
+  .maplibregl-popup-anchor-top .maplibregl-popup-tip {
+    @apply !border-b-popover;
+    }
+  .maplibregl-popup-anchor-left .maplibregl-popup-tip {
+    @apply !border-r-popover;
+    }
+  .maplibregl-popup-anchor-right .maplibregl-popup-tip {
+    @apply !border-l-popover;
+    }
+  .maplibregl-popup-anchor-bottom-left .maplibregl-popup-tip,
+  .maplibregl-popup-anchor-bottom-right .maplibregl-popup-tip,
+  .maplibregl-popup-anchor-top-left .maplibregl-popup-tip,
+  .maplibregl-popup-anchor-top-right .maplibregl-popup-tip {
+    @apply !border-popover;
+    }
+  .maplibregl-popup-close-button {
+    @apply !text-muted-foreground hover:!text-foreground !px-1.5 !py-0.5;
+    }
 }

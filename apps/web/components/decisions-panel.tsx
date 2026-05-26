@@ -3,6 +3,9 @@
 import {
   defaultProjectEconomics,
   getProjectProgress,
+  getSuggestionsForNation,
+  PROJECT_KIND_LABELS,
+  type DecisionSuggestion,
   type Project,
   type ProjectKind,
   type ProjectLocation,
@@ -25,6 +28,7 @@ import {
   MapPinIcon,
   RouteIcon,
   ShieldIcon,
+  SparklesIcon,
   TrendingUpIcon,
   XIcon,
   type LucideIcon,
@@ -87,10 +91,63 @@ export function DecisionsPanel() {
   const [startDate, setStartDate] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [aiSuggestions, setAiSuggestions] = useState<DecisionSuggestion[]>([])
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiError, setAiError] = useState<string | null>(null)
 
   const todayIso = game ? toDateInputValue(game.date) : ""
   const effectiveStartDate = startDate || todayIso
   const projects = useMemo(() => game?.projects ?? [], [game?.projects])
+
+  const staticSuggestions = useMemo(
+    () => (game ? getSuggestionsForNation(game.nation) : []),
+    [game?.nation]
+  )
+  const groupedSuggestions = useMemo(
+    () => groupByKind(staticSuggestions),
+    [staticSuggestions]
+  )
+
+  async function fetchAiSuggestions() {
+    if (!game) return
+    setAiLoading(true)
+    setAiError(null)
+    try {
+      const res = await fetch("/api/suggest-decisions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          nation: game.nation,
+          date: game.date.toISOString(),
+          treasury: game.treasury,
+          approval: game.approval,
+          recentBriefings: game.briefing.slice(0, 5).map((b) => b.title),
+        }),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(
+          typeof body?.error === "string" ? body.error : `HTTP ${res.status}`
+        )
+      }
+      const data = (await res.json()) as {
+        suggestions: Array<Omit<DecisionSuggestion, "id">>
+      }
+      const stamped: DecisionSuggestion[] = data.suggestions.map(
+        (s, i) => ({ ...s, id: `ai-${Date.now()}-${i}` })
+      )
+      setAiSuggestions(stamped)
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "Unknown error")
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
+  function applySuggestion(s: DecisionSuggestion) {
+    setPrompt(s.prompt)
+    setError(null)
+  }
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -166,8 +223,8 @@ export function DecisionsPanel() {
       className="h-[560px] w-[820px] max-w-[95vw]"
       bodyClassName="bg-background/95"
     >
-      <div className="grid h-full grid-cols-[1fr_1fr] divide-x divide-border/80">
-        <section className="flex min-h-0 flex-col">
+      <div className="grid h-full grid-cols-[minmax(0,1fr)_minmax(0,1fr)] divide-x divide-border/80">
+        <section className="flex min-h-0 min-w-0 flex-col">
           <header className="border-b border-border/80 bg-muted/40 px-4 py-2">
             <h3 className="font-semibold text-sm tracking-wide uppercase">
               Active decisions
@@ -196,18 +253,66 @@ export function DecisionsPanel() {
           </div>
         </section>
 
-        <section className="flex min-h-0 flex-col">
-          <header className="border-b border-border/80 bg-muted/40 px-4 py-2">
-            <h3 className="font-semibold text-sm tracking-wide uppercase">
-              New decision
-            </h3>
-            <p className="text-muted-foreground text-xs">
-              Describe an initiative — the AI drafts cost and duration.
-            </p>
+        <section className="flex min-h-0 min-w-0 flex-col">
+          <header className="flex items-center justify-between gap-2 border-b border-border/80 bg-muted/40 px-4 py-2">
+            <div>
+              <h3 className="font-semibold text-sm tracking-wide uppercase">
+                Suggestions
+              </h3>
+              <p className="text-muted-foreground text-xs">
+                Click a suggestion to draft it, then edit before scheduling.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={fetchAiSuggestions}
+              disabled={aiLoading}
+              title="Generate 3 AI suggestions tailored to current state"
+            >
+              {aiLoading ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : (
+                <SparklesIcon className="size-3.5" />
+              )}
+              Surprise me
+            </Button>
           </header>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 py-2">
+            {aiError && (
+              <p className="mb-2 text-xs text-destructive" role="alert">
+                AI suggestions failed: {aiError}
+              </p>
+            )}
+            {aiSuggestions.length > 0 && (
+              <SuggestionGroup
+                label="Suggested for you"
+                accent
+                suggestions={aiSuggestions}
+                onPick={applySuggestion}
+              />
+            )}
+            {groupedSuggestions.length === 0 && aiSuggestions.length === 0 ? (
+              <p className="text-muted-foreground text-xs">
+                No suggestions for {game.nation}.
+              </p>
+            ) : (
+              groupedSuggestions.map(([kind, items]) => (
+                <SuggestionGroup
+                  key={kind}
+                  label={PROJECT_KIND_LABELS[kind]}
+                  suggestions={items}
+                  onPick={applySuggestion}
+                />
+              ))
+            )}
+          </div>
+
           <form
             onSubmit={handleSubmit}
-            className="flex min-h-0 flex-1 flex-col gap-3 px-4 py-3"
+            className="flex flex-col gap-2 border-t border-border/80 bg-muted/20 px-4 py-3"
           >
             <div className="grid gap-1.5">
               <Label htmlFor="decision-prompt">Initiative</Label>
@@ -215,44 +320,39 @@ export function DecisionsPanel() {
                 id="decision-prompt"
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="E.g. launch a nuclear power plant construction project in Calais"
-                rows={4}
+                placeholder="Describe a decision, or pick a suggestion above."
+                rows={3}
                 disabled={loading}
               />
             </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="decision-start-date">Start date</Label>
-              <Input
-                id="decision-start-date"
-                type="date"
-                value={effectiveStartDate}
-                min={todayIso}
-                onChange={(e) => setStartDate(e.target.value)}
-                disabled={loading}
-                className="w-fit"
-              />
-              <p className="text-muted-foreground text-xs">
-                Defaults to today. Pick a future date to schedule for later.
-              </p>
-            </div>
-            <div className="rounded border border-border/60 bg-muted/30 px-3 py-2 text-xs tabular-nums">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Treasury</span>
-                <span className="font-medium">
-                  €{Math.round(game.treasury).toLocaleString()}M
-                </span>
+            <div className="flex items-end justify-between gap-2">
+              <div className="grid gap-1.5">
+                <Label htmlFor="decision-start-date" className="text-xs">
+                  Start date
+                </Label>
+                <Input
+                  id="decision-start-date"
+                  type="date"
+                  value={effectiveStartDate}
+                  min={todayIso}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  disabled={loading}
+                  className="w-fit"
+                />
               </div>
-              <p className="mt-1 text-muted-foreground">
-                Costs are derived from project type and duration after the AI
-                drafts the proposal.
-              </p>
+              <div className="text-right text-xs tabular-nums">
+                <div className="text-muted-foreground">Treasury</div>
+                <div className="font-medium">
+                  €{Math.round(game.treasury).toLocaleString()}M
+                </div>
+              </div>
             </div>
             {error && (
               <p className="text-destructive text-xs" role="alert">
                 {error}
               </p>
             )}
-            <div className="mt-auto flex justify-end gap-2 pt-2">
+            <div className="flex justify-end gap-2">
               <Button
                 type="button"
                 variant="secondary"
@@ -270,6 +370,88 @@ export function DecisionsPanel() {
         </section>
       </div>
     </FloatingPanel>
+  )
+}
+
+function groupByKind(
+  suggestions: DecisionSuggestion[]
+): Array<[ProjectKind, DecisionSuggestion[]]> {
+  const groups = new Map<ProjectKind, DecisionSuggestion[]>()
+  for (const s of suggestions) {
+    const list = groups.get(s.kind) ?? []
+    list.push(s)
+    groups.set(s.kind, list)
+  }
+  // Order matches PROJECT_KIND_LABELS declaration order for stable rendering.
+  const order: ProjectKind[] = [
+    "construction:nuclear",
+    "construction:industrial",
+    "construction:infrastructure",
+    "construction:military",
+    "construction:civilian",
+    "diplomacy",
+    "economic",
+    "other",
+  ]
+  return order
+    .filter((k) => groups.has(k))
+    .map((k) => [k, groups.get(k)!] as [ProjectKind, DecisionSuggestion[]])
+}
+
+function SuggestionGroup({
+  label,
+  suggestions,
+  onPick,
+  accent = false,
+}: {
+  label: string
+  suggestions: DecisionSuggestion[]
+  onPick: (s: DecisionSuggestion) => void
+  accent?: boolean
+}) {
+  return (
+    <div className="mb-3 last:mb-0">
+      <h4
+        className={
+          accent
+            ? "mb-1 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-primary"
+            : "mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+        }
+      >
+        {accent && <SparklesIcon className="size-3" />}
+        {label}
+      </h4>
+      <ul className="grid gap-1.5">
+        {suggestions.map((s) => {
+          const Icon = PROJECT_ICONS[s.kind] ?? MapPinIcon
+          return (
+            <li key={s.id}>
+              <button
+                type="button"
+                onClick={() => onPick(s)}
+                className={
+                  accent
+                    ? "group flex w-full items-start gap-2 rounded-md border border-primary/30 bg-primary/5 px-2.5 py-1.5 text-left transition-colors hover:border-primary/60 hover:bg-primary/10"
+                    : "group flex w-full items-start gap-2 rounded-md border border-border/60 bg-card/60 px-2.5 py-1.5 text-left transition-colors hover:border-border hover:bg-card"
+                }
+              >
+                <Icon className="mt-0.5 size-3.5 shrink-0 text-muted-foreground group-hover:text-foreground" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-xs font-medium leading-tight">
+                    {s.title}
+                  </div>
+                  {s.hint && (
+                    <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                      {s.hint}
+                    </div>
+                  )}
+                </div>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </div>
   )
 }
 
@@ -304,10 +486,12 @@ function ProjectRow({
     <li className="flex items-start gap-2 rounded-md border border-border/60 bg-card/80 px-3 py-2 text-sm">
       <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium leading-tight">{project.name}</div>
-        <div className="mt-0.5 flex items-center gap-1 text-muted-foreground text-xs">
-          <StatusIcon className="size-3" />
-          <span className="truncate">
+        <div className="break-words font-medium leading-tight">
+          {project.name}
+        </div>
+        <div className="mt-0.5 flex items-start gap-1 text-muted-foreground text-xs">
+          <StatusIcon className="mt-0.5 size-3 shrink-0" />
+          <span className="break-words">
             {statusLabel} · {project.location.label}
           </span>
         </div>

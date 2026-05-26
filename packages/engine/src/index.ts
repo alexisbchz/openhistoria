@@ -3,11 +3,15 @@ export type {
   BriefingEntry,
   BriefingKind,
   CharacterId,
+  DiplomaticChannel,
+  DiplomaticMessageArgs,
+  DiplomaticTone,
   GameOutcome,
   GameOverState,
   GameSnapshot,
   GameSpeed,
   NationCode,
+  RelationState,
 } from "./game"
 export {
   defaultProjectEconomics,
@@ -63,3 +67,8 @@ export {
 export type { Clock } from "./clock"
 export { listMinisters } from "./cabinet"
 export type { Minister } from "./cabinet"
+export {
+  getSuggestionsForNation,
+  PROJECT_KIND_LABELS,
+} from "./decision-suggestions"
+export type { DecisionSuggestion } from "./decision-suggestions"

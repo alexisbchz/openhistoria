@@ -36,8 +36,36 @@ export interface GameOverState {
   date: string
 }
 
+export interface RelationState {
+  opinion: number // -100..+100, clamped
+  allied: boolean
+  lastInteractionAt: string | null // ISO date
+}
+
+export type DiplomaticChannel = "sms" | "tweet" | "call" | "letter"
+export type DiplomaticTone =
+  | "friendly"
+  | "neutral"
+  | "threatening"
+  | "joking"
+
+export interface DiplomaticMessageArgs {
+  target: string
+  opinionDelta: number
+  cost?: number // €M, default 0
+  briefingTitle: string
+  briefingDetail?: string
+  briefingKind?: BriefingKind
+}
+
+export const DEFAULT_RELATION: RelationState = {
+  opinion: 0,
+  allied: false,
+  lastInteractionAt: null,
+}
+
 export interface GameSnapshot {
-  version: 3
+  version: 4
   nation: NationCode
   character: CharacterId
   date: string
@@ -52,6 +80,7 @@ export interface GameSnapshot {
   pendingEvent: EventDefinition | null
   briefing: BriefingEntry[]
   gameOver: GameOverState | null
+  relations: Record<string, RelationState>
 }
 
 export type BriefingKind =
@@ -86,6 +115,7 @@ interface GameFields {
   pendingEvent: EventDefinition | null
   briefing: readonly BriefingEntry[]
   gameOver: GameOverState | null
+  relations: Readonly<Record<string, RelationState>>
 }
 
 const countryStatsProvider = new CountryStatsProvider()
@@ -97,6 +127,14 @@ const BOND_DEBT_DELTA_PER_BILLION = 0.03
 
 function clampApproval(v: number): number {
   return Math.max(0, Math.min(100, v))
+}
+
+function clampOpinion(v: number): number {
+  return Math.max(-100, Math.min(100, v))
+}
+
+function normalizeNationKey(code: string): string {
+  return code.trim().toUpperCase()
 }
 
 export class Game {
@@ -114,6 +152,7 @@ export class Game {
   readonly pendingEvent: EventDefinition | null
   readonly briefing: readonly BriefingEntry[]
   readonly gameOver: GameOverState | null
+  readonly relations: Readonly<Record<string, RelationState>>
 
   constructor(init: GameFields) {
     this.nation = init.nation
@@ -130,6 +169,7 @@ export class Game {
     this.pendingEvent = init.pendingEvent
     this.briefing = init.briefing
     this.gameOver = init.gameOver
+    this.relations = init.relations
   }
 
   static createNew(): Game {
@@ -157,6 +197,7 @@ export class Game {
         }),
       ],
       gameOver: null,
+      relations: {},
     })
   }
 
@@ -176,6 +217,7 @@ export class Game {
       pendingEvent: this.pendingEvent,
       briefing: this.briefing,
       gameOver: this.gameOver,
+      relations: this.relations,
       ...overrides,
     })
   }
@@ -261,6 +303,86 @@ export class Game {
       detail: "+1.5 approval · −€80M comms budget",
     }))
     return this.with({ treasury: this.treasury - cost, approval, briefing })
+  }
+
+  getRelation(target: string): RelationState {
+    const key = normalizeNationKey(target)
+    return this.relations[key] ?? DEFAULT_RELATION
+  }
+
+  proposeAlliance(target: string): Game {
+    if (this.gameOver) return this
+    const key = normalizeNationKey(target)
+    if (!key || key === this.nation) return this
+    const current = this.relations[key] ?? DEFAULT_RELATION
+    if (current.allied) return this
+    const next: RelationState = {
+      opinion: clampOpinion(Math.max(current.opinion + 25, 50)),
+      allied: true,
+      lastInteractionAt: this.date.toISOString(),
+    }
+    const briefing = pushTo(this.briefing, makeBriefing(this.date, {
+      kind: "milestone",
+      title: `Alliance proposed: ${key}`,
+      detail: "Accepted.",
+    }))
+    return this.with({
+      relations: { ...this.relations, [key]: next },
+      briefing,
+    })
+  }
+
+  breakAlliance(target: string): Game {
+    if (this.gameOver) return this
+    const key = normalizeNationKey(target)
+    if (!key || key === this.nation) return this
+    const current = this.relations[key] ?? DEFAULT_RELATION
+    if (!current.allied) return this
+    const next: RelationState = {
+      opinion: clampOpinion(current.opinion - 30),
+      allied: false,
+      lastInteractionAt: this.date.toISOString(),
+    }
+    const briefing = pushTo(this.briefing, makeBriefing(this.date, {
+      kind: "warning",
+      title: `Alliance broken: ${key}`,
+      detail: "Relations have soured.",
+    }))
+    return this.with({
+      relations: { ...this.relations, [key]: next },
+      briefing,
+    })
+  }
+
+  /**
+   * Apply the outcome of a diplomatic message (SMS, tweet, call, letter).
+   * Updates the bilateral opinion, deducts any treasury cost, and logs a
+   * briefing entry. Caller is responsible for already having checked the
+   * treasury; this method is a no-op if cost > treasury (with a buffer).
+   */
+  sendDiplomaticMessage(args: DiplomaticMessageArgs): Game {
+    if (this.gameOver) return this
+    const key = normalizeNationKey(args.target)
+    if (!key || key === this.nation) return this
+    const cost = args.cost ?? 0
+    if (cost > 0 && this.treasury < cost - 50_000) return this
+
+    const current = this.relations[key] ?? DEFAULT_RELATION
+    const next: RelationState = {
+      ...current,
+      opinion: clampOpinion(current.opinion + args.opinionDelta),
+      lastInteractionAt: this.date.toISOString(),
+    }
+    const briefing = pushTo(this.briefing, makeBriefing(this.date, {
+      kind: args.briefingKind ?? "milestone",
+      title: args.briefingTitle,
+      detail: args.briefingDetail,
+    }))
+    return this.with({
+      relations: { ...this.relations, [key]: next },
+      treasury: this.treasury - cost,
+      briefing,
+    })
   }
 
   tick(days: number): Game {
@@ -379,7 +501,7 @@ export class Game {
 
   toSnapshot(): GameSnapshot {
     return {
-      version: 3,
+      version: 4,
       nation: this.nation,
       character: this.character,
       date: this.date.toISOString(),
@@ -394,12 +516,16 @@ export class Game {
       pendingEvent: this.pendingEvent ? structuredClone(this.pendingEvent) : null,
       briefing: [...this.briefing],
       gameOver: this.gameOver ? { ...this.gameOver } : null,
+      relations: structuredClone(this.relations) as Record<
+        string,
+        RelationState
+      >,
     }
   }
 
   static fromSnapshot(snapshot: AnySnapshot): Game {
     const version = (snapshot as { version?: number }).version
-    if (version === 3) {
+    if (version === 4) {
       const s = snapshot as GameSnapshot
       return new Game({
         nation: s.nation,
@@ -416,6 +542,7 @@ export class Game {
         pendingEvent: s.pendingEvent,
         briefing: s.briefing ?? [],
         gameOver: s.gameOver,
+        relations: s.relations ?? {},
       })
     }
     return migrateLegacy(snapshot)
@@ -426,6 +553,25 @@ type AnySnapshot =
   | GameSnapshot
   | LegacyV1Snapshot
   | LegacyV2Snapshot
+  | LegacyV3Snapshot
+
+interface LegacyV3Snapshot {
+  version: 3
+  nation: NationCode
+  character: CharacterId
+  date: string
+  startedAt: string
+  speed: GameSpeed
+  paused: boolean
+  projects: Project[]
+  treasury: number
+  approval: number
+  stats: CountryStats
+  triggeredEvents: TriggeredEvent[]
+  pendingEvent: EventDefinition | null
+  briefing: BriefingEntry[]
+  gameOver: GameOverState | null
+}
 
 interface LegacyV1Snapshot {
   version: 1
@@ -457,6 +603,26 @@ interface LegacyV2Snapshot {
 }
 
 function migrateLegacy(snapshot: AnySnapshot): Game {
+  if ((snapshot as LegacyV3Snapshot).version === 3) {
+    const s = snapshot as LegacyV3Snapshot
+    return new Game({
+      nation: s.nation,
+      character: s.character,
+      date: new Date(s.date),
+      startedAt: new Date(s.startedAt),
+      speed: s.speed ?? 1,
+      paused: s.paused ?? true,
+      projects: s.projects ?? [],
+      treasury: s.treasury,
+      approval: s.approval,
+      stats: s.stats,
+      triggeredEvents: s.triggeredEvents ?? [],
+      pendingEvent: s.pendingEvent,
+      briefing: s.briefing ?? [],
+      gameOver: s.gameOver,
+      relations: {},
+    })
+  }
   if ((snapshot as LegacyV2Snapshot).version === 2) {
     const s = snapshot as LegacyV2Snapshot
     return new Game({
@@ -474,6 +640,7 @@ function migrateLegacy(snapshot: AnySnapshot): Game {
       pendingEvent: null,
       briefing: s.briefing ?? [],
       gameOver: s.gameOver,
+      relations: {},
     })
   }
   const s = snapshot as LegacyV1Snapshot
@@ -505,6 +672,7 @@ function migrateLegacy(snapshot: AnySnapshot): Game {
     pendingEvent: null,
     briefing: [],
     gameOver: null,
+    relations: {},
   })
 }
 

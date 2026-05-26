@@ -13,6 +13,7 @@ import {
   ADM0_FILL_LAYER,
   ADM0_STROKE_LAYER,
   ADM0_SOURCE_LAYER,
+  ADM1_FILL_LAYER,
   GADM_SOURCE_ID,
   gadmSourceSpec,
 } from "@/components/map-gadm-source"
@@ -217,14 +218,25 @@ export function MapCountryRegions() {
       map.getCanvas().style.cursor = ""
     }
 
+    const handleBackgroundClick = (event: maplibregl.MapMouseEvent) => {
+      const layers = [ADM0_FILL_LAYER, ADM1_FILL_LAYER].filter((id) =>
+        map.getLayer(id)
+      )
+      if (layers.length === 0) return
+      const hits = map.queryRenderedFeatures(event.point, { layers })
+      if (hits.length === 0) setSelected(null)
+    }
+
     map.on("click", ADM0_FILL_LAYER, handleClick)
     map.on("mousemove", ADM0_FILL_LAYER, handleMouseMove)
     map.on("mouseleave", ADM0_FILL_LAYER, handleMouseLeave)
+    map.on("click", handleBackgroundClick)
 
     return () => {
       map.off("click", ADM0_FILL_LAYER, handleClick)
       map.off("mousemove", ADM0_FILL_LAYER, handleMouseMove)
       map.off("mouseleave", ADM0_FILL_LAYER, handleMouseLeave)
+      map.off("click", handleBackgroundClick)
     }
   }, [map, layersReady, setSelected])
 
