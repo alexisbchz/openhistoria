@@ -43,6 +43,8 @@ interface GameActions {
   resolveEventChoice: (eventId: string, choiceId: string) => void
   setReformAgenda: (id: ReformAgendaId) => void
   resetGame: () => void
+  importGame: (raw: string) => { ok: true } | { ok: false; error: string }
+  exportSnapshotJson: () => string | null
 }
 
 interface TickStats {
@@ -74,6 +76,8 @@ const noopActions: GameActions = {
   resolveEventChoice: () => {},
   setReformAgenda: () => {},
   resetGame: () => {},
+  importGame: () => ({ ok: false, error: "Game provider not ready" }),
+  exportSnapshotJson: () => null,
 }
 
 const DEFAULT_TICK_STATS: TickStats = {
@@ -294,6 +298,42 @@ export function GameProvider({ children }: { children: ReactNode }) {
     setGame(next)
   }, [])
 
+  const importGame = useCallback(
+    (raw: string): { ok: true } | { ok: false; error: string } => {
+      const parsed = Result.fromThrowable(
+        (s: string) => JSON.parse(s) as unknown,
+        (e) =>
+          e instanceof Error
+            ? e
+            : new Error("Imported file is not valid JSON")
+      )(raw)
+      if (parsed.isErr()) {
+        return { ok: false, error: parsed.error.message }
+      }
+      const built = Result.fromThrowable(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (s: any) => Game.fromSnapshot(s),
+        (e) =>
+          e instanceof Error
+            ? e
+            : new Error("Snapshot failed migration")
+      )(parsed.value)
+      if (built.isErr()) {
+        return { ok: false, error: built.error.message }
+      }
+      saveGame(built.value)
+      lastSavedDateRef.current = built.value.date.getTime()
+      setGame(built.value)
+      return { ok: true }
+    },
+    []
+  )
+
+  const exportSnapshotJson = useCallback((): string | null => {
+    if (!game) return null
+    return JSON.stringify(game.toSnapshot(), null, 2)
+  }, [game])
+
   useEffect(() => {
     if (!game) return
     if (game.paused || game.gameOver || game.pendingEventId) return
@@ -367,6 +407,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
         resolveEventChoice,
         setReformAgenda,
         resetGame,
+        importGame,
+        exportSnapshotJson,
       },
     }),
     [
@@ -386,6 +428,8 @@ export function GameProvider({ children }: { children: ReactNode }) {
       resolveEventChoice,
       setReformAgenda,
       resetGame,
+      importGame,
+      exportSnapshotJson,
     ]
   )
 

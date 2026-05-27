@@ -85,8 +85,8 @@ export {
   setClock,
 } from "./clock"
 export type { Clock } from "./clock"
-export { listMinisters } from "./cabinet"
-export type { Minister } from "./cabinet"
+export { getCabinetEffects, listMinisters } from "./cabinet"
+export type { CabinetEffects, Minister, MinisterBonus } from "./cabinet"
 export {
   getSuggestionsForNation,
   PROJECT_KIND_LABELS,

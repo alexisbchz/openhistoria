@@ -78,14 +78,17 @@ describe("Game.addProject", () => {
     expect(next.briefing[0]?.kind).toBe("project_started")
   })
 
-  it("refuses if treasury is far below upfront cost", () => {
+  it("refuses if treasury is far below upfront cost and logs a warning", () => {
     const game = freshGame().with({ treasury: -100_000 })
     const project = makeProject({
       kind: "construction:nuclear",
       expectedDurationDays: 3650,
     })
     const next = game.addProject(project)
-    expect(next).toBe(game)
+    expect(next.projects).toHaveLength(0)
+    expect(next.treasury).toBe(game.treasury)
+    expect(next.briefing[0]?.kind).toBe("warning")
+    expect(next.briefing[0]?.title).toContain("Cabinet refused")
   })
 
   it("keeps project_started at briefing[0] even when AI nations react", () => {

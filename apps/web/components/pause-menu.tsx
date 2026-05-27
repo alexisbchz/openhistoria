@@ -10,8 +10,15 @@ import {
   DialogTitle,
 } from "@workspace/ui/components/dialog"
 import { useMap, useMapEvents } from "@workspace/ui/components/map"
-import { BugIcon, CheckIcon, CopyIcon } from "lucide-react"
-import { useEffect, useState } from "react"
+import {
+  BugIcon,
+  CheckIcon,
+  CopyIcon,
+  DownloadIcon,
+  UploadIcon,
+} from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 
 import { useGame, useGameActions } from "@/components/game-provider"
 import { useHudState } from "@/components/hud-state"
@@ -19,9 +26,10 @@ import { useMapLayers } from "@/components/map-layers-state"
 
 export function PauseMenu() {
   const { pauseMenuOpen, closePauseMenu } = useHudState()
-  const { resetGame } = useGameActions()
+  const { resetGame, importGame, exportSnapshotJson } = useGameActions()
   const [confirmReset, setConfirmReset] = useState(false)
   const [debugOpen, setDebugOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   function handleOpenChange(open: boolean) {
     if (open) return
@@ -35,6 +43,49 @@ export function PauseMenu() {
     setConfirmReset(false)
     setDebugOpen(false)
     closePauseMenu()
+  }
+
+  function handleExport() {
+    const json = exportSnapshotJson()
+    if (!json) {
+      toast.error("No game to export yet")
+      return
+    }
+    const blob = new Blob([json], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `openhistoria-save-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  function handleImportClick() {
+    fileInputRef.current?.click()
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = "" // allow re-selecting the same file later
+    if (!file) return
+    file
+      .text()
+      .then((text) => {
+        const result = importGame(text)
+        if (result.ok) {
+          toast.success("Save imported")
+          closePauseMenu()
+        } else {
+          toast.error("Import failed", { description: result.error })
+        }
+      })
+      .catch((cause: unknown) => {
+        const message =
+          cause instanceof Error ? cause.message : "Could not read file"
+        toast.error("Import failed", { description: message })
+      })
   }
 
   return (
@@ -63,6 +114,24 @@ export function PauseMenu() {
           ) : (
             <>
               <Button onClick={() => handleOpenChange(false)}>Resume</Button>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="outline" onClick={handleExport}>
+                  <DownloadIcon />
+                  Export save
+                </Button>
+                <Button variant="outline" onClick={handleImportClick}>
+                  <UploadIcon />
+                  Import save
+                </Button>
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={handleImportFile}
+                aria-label="Import save file"
+              />
               <Button
                 variant="outline"
                 onClick={() => setConfirmReset(true)}

@@ -23,6 +23,7 @@ import {
   simulateAiTick,
   type AiAction,
 } from "./ai-nations"
+import { getCabinetEffects } from "./cabinet"
 
 export type NationCode = "FR"
 export type CharacterId = "macron"
@@ -397,7 +398,14 @@ export class Game {
     // Refuse if scheduling this project would push the treasury past the
     // discretionary borrowing buffer — the player needs to issue a bond first.
     if (this.treasury - project.upfrontCost < -ADDPROJECT_TREASURY_BUFFER) {
-      return this
+      const shortfall =
+        project.upfrontCost - (this.treasury + ADDPROJECT_TREASURY_BUFFER)
+      const briefing = pushTo(this.briefing, makeBriefing(this.date, {
+        kind: "warning",
+        title: `Cabinet refused: ${project.name}`,
+        detail: `Short of €${Math.round(shortfall).toLocaleString()}M. Issue bonds or pick a smaller project.`,
+      }))
+      return this.with({ briefing })
     }
     const treasury = this.treasury - project.upfrontCost
 
@@ -484,8 +492,14 @@ export class Game {
       BOND_HARD_DEBT_CAP_PCT - BOND_STRESS_DEBT_PCT
     )
     const stress = 1 + Math.min(2, (overshoot / stressSpan) * 2)
-    const debtDelta = BOND_DEBT_DELTA_PER_BILLION * billions * stress
-    const approvalCost = BOND_APPROVAL_COST_PER_BILLION * billions * stress
+    const cabinet = getCabinetEffects(this.nation)
+    const debtDelta =
+      BOND_DEBT_DELTA_PER_BILLION * billions * stress * cabinet.bondDebtMultiplier
+    const approvalCost =
+      BOND_APPROVAL_COST_PER_BILLION *
+      billions *
+      stress *
+      cabinet.bondApprovalMultiplier
     const stats = structuredClone(this.stats)
     stats.economy.publicDebtPctGdp += debtDelta
     const approval = clampApproval(this.approval - approvalCost)
@@ -611,8 +625,13 @@ export class Game {
       days
     )
 
+    const cabinet = getCabinetEffects(this.nation)
     let projects = this.projects
     let approval = econ.approval
+    // Passive daily approval contribution from the cabinet (e.g. PM lift).
+    if (cabinet.approvalPerDay) {
+      approval = clampApproval(approval + cabinet.approvalPerDay * days)
+    }
     let treasury = econ.treasury
     let briefing = this.briefing
     let stats: CountryStats = econ.stats
@@ -622,12 +641,16 @@ export class Game {
     for (const project of projects) {
       const progress = getProjectProgress(project, newDate)
       if (progress.isComplete) {
-        approval = clampApproval(approval + project.completionApproval)
+        const bonus =
+          cabinet.projectCompletionApprovalBonusByKind[project.kind] ?? 0
+        const completionApproval = project.completionApproval + bonus
+        approval = clampApproval(approval + completionApproval)
         stats = bumpGdp(stats, project.completionGdp * 1_000_000)
+        const bonusSuffix = bonus > 0 ? ` (cabinet +${bonus})` : ""
         briefing = pushTo(briefing, makeBriefing(newDate, {
           kind: "project_completed",
           title: `Completed: ${project.name}`,
-          detail: `+${project.completionApproval} approval · +€${project.completionGdp}M GDP`,
+          detail: `+${completionApproval} approval${bonusSuffix} · +€${project.completionGdp}M GDP`,
         }))
       } else {
         remaining.push(project)
@@ -694,6 +717,7 @@ export class Game {
       playerNation: this.nation,
       relations: this.relations,
       currentDate: newDate,
+      diplomacyDriftMultiplier: cabinet.diplomacyDriftMultiplier,
     })
     for (const action of ai.actions) {
       briefing = pushTo(briefing, makeBriefing(newDate, {

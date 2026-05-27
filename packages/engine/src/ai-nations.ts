@@ -122,6 +122,52 @@ export const AI_NATIONS: readonly AiNationProfile[] = [
       diplomacy: 2,
     },
   },
+  {
+    code: "BR",
+    name: "Brazil",
+    stance: "neutral",
+    baseOpinion: 10,
+    activity: 0.35,
+    reactsTo: {
+      "construction:industrial": 2,
+      diplomacy: 3,
+    },
+  },
+  {
+    code: "IN",
+    name: "India",
+    stance: "neutral",
+    baseOpinion: 5,
+    activity: 0.5,
+    reactsTo: {
+      "construction:industrial": 2,
+      "construction:nuclear": -2,
+      diplomacy: 2,
+    },
+  },
+  {
+    code: "AU",
+    name: "Australia",
+    stance: "ally",
+    baseOpinion: 25,
+    activity: 0.35,
+    reactsTo: {
+      "construction:military": 2,
+      diplomacy: 2,
+    },
+  },
+  {
+    code: "CA",
+    name: "Canada",
+    stance: "ally",
+    baseOpinion: 30,
+    activity: 0.35,
+    reactsTo: {
+      "construction:infrastructure": 2,
+      "construction:nuclear": -2,
+      diplomacy: 3,
+    },
+  },
 ]
 
 const PROFILE_INDEX: Record<string, AiNationProfile> = Object.fromEntries(
@@ -197,6 +243,8 @@ export interface AiTickInput {
   playerNation: NationCode | string
   relations: Readonly<Record<string, RelationState>>
   currentDate: Date
+  /** Multiplier on the daily opinion drift, from the player's foreign minister. */
+  diplomacyDriftMultiplier?: number
 }
 
 export interface AiTickResult {
@@ -228,9 +276,13 @@ export function simulateAiTick(input: AiTickInput): AiTickResult {
     const current = nextRelations[profile.code] ?? DEFAULT_RELATION
 
     // Drift opinion toward baseOpinion. Geometric so big `days` still
-    // converge asymptotically rather than overshooting in one tick.
+    // converge asymptotically rather than overshooting in one tick. The
+    // foreign minister, if present, accelerates drift toward the baseOpinion
+    // (positive *or* negative — i.e. it brings the relationship to the
+    // "natural" place faster).
+    const driftRate = DRIFT_PER_DAY * (input.diplomacyDriftMultiplier ?? 1)
     const gap = profile.baseOpinion - current.opinion
-    const driftFraction = 1 - Math.pow(1 - DRIFT_PER_DAY, days)
+    const driftFraction = 1 - Math.pow(1 - driftRate, days)
     let opinion = clamp(current.opinion + gap * driftFraction, -100, 100)
     let allied = current.allied
     let lastInteractionAt = current.lastInteractionAt

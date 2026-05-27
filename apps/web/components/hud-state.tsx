@@ -42,6 +42,14 @@ interface HudStateValue {
   decisionsPos: PanelPos
   setDecisionsPos: (pos: PanelPos) => void
 
+  // Diplomacy panel (floating)
+  diplomacyOpen: boolean
+  openDiplomacy: () => void
+  closeDiplomacy: () => void
+  toggleDiplomacy: () => void
+  diplomacyPos: PanelPos
+  setDiplomacyPos: (pos: PanelPos) => void
+
   // Pause menu (modal)
   pauseMenuOpen: boolean
   openPauseMenu: () => void
@@ -83,6 +91,9 @@ export function HudStateProvider({ children }: { children: ReactNode }) {
 
   const [decisionsOpen, setDecisionsOpen] = useState(false)
   const [decisionsPos, setDecisionsPos] = useState<PanelPos | null>(null)
+
+  const [diplomacyOpen, setDiplomacyOpen] = useState(false)
+  const [diplomacyPos, setDiplomacyPos] = useState<PanelPos>({ x: 24, y: 80 })
 
   const [pauseMenuOpen, setPauseMenuOpen] = useState(false)
   const [briefingCollapsed, setBriefingCollapsed] = useState(false)
@@ -126,6 +137,10 @@ export function HudStateProvider({ children }: { children: ReactNode }) {
     if (decisionsOpen) closeDecisions()
     else openDecisions()
   }, [decisionsOpen, openDecisions, closeDecisions])
+
+  const openDiplomacy = useCallback(() => setDiplomacyOpen(true), [])
+  const closeDiplomacy = useCallback(() => setDiplomacyOpen(false), [])
+  const toggleDiplomacy = useCallback(() => setDiplomacyOpen((v) => !v), [])
 
   const openPauseMenu = useCallback(() => {
     if (game && !game.gameOver && !game.pendingEvent) {
@@ -178,6 +193,12 @@ export function HudStateProvider({ children }: { children: ReactNode }) {
       toggleDecisions,
       decisionsPos: decisionsPos ?? defaultDecisionsPos(),
       setDecisionsPos: setDecisionsPosSafe,
+      diplomacyOpen,
+      openDiplomacy,
+      closeDiplomacy,
+      toggleDiplomacy,
+      diplomacyPos,
+      setDiplomacyPos,
       pauseMenuOpen,
       openPauseMenu,
       closePauseMenu,
@@ -202,6 +223,11 @@ export function HudStateProvider({ children }: { children: ReactNode }) {
       toggleDecisions,
       decisionsPos,
       setDecisionsPosSafe,
+      diplomacyOpen,
+      openDiplomacy,
+      closeDiplomacy,
+      toggleDiplomacy,
+      diplomacyPos,
       pauseMenuOpen,
       openPauseMenu,
       closePauseMenu,

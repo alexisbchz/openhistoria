@@ -1,16 +1,20 @@
 "use client"
 
 import type { BriefingEntry, BriefingKind } from "@workspace/engine"
+import { cn } from "@workspace/ui/lib/utils"
 import {
   AlertTriangleIcon,
   BanknoteIcon,
   CheckCircle2Icon,
+  FilterIcon,
   HammerIcon,
   LandmarkIcon,
   NewspaperIcon,
   XCircleIcon,
   type LucideIcon,
 } from "lucide-react"
+import { useMemo, useState } from "react"
+
 import { useGame } from "@/components/game-provider"
 import { useHudState } from "@/components/hud-state"
 
@@ -24,6 +28,16 @@ const ICONS: Record<BriefingKind, LucideIcon> = {
   treasury: BanknoteIcon,
 }
 
+const KIND_LABELS: Record<BriefingKind, string> = {
+  event: "Events",
+  project_completed: "Completed",
+  project_started: "Started",
+  project_cancelled: "Cancelled",
+  milestone: "Milestones",
+  warning: "Warnings",
+  treasury: "Treasury",
+}
+
 const dateFormatter = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
@@ -32,23 +46,113 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 export function BriefingPanel() {
   const game = useGame()
   const { briefingCollapsed, toggleBriefing } = useHudState()
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  // null = "all kinds"; otherwise the Set holds the kinds the player has
+  // deselected (UI defaults to everything visible).
+  const [hiddenKinds, setHiddenKinds] = useState<Set<BriefingKind>>(
+    () => new Set()
+  )
+
+  const entries = useMemo(() => {
+    if (!game) return []
+    const filtered =
+      hiddenKinds.size === 0
+        ? game.briefing
+        : game.briefing.filter((b) => !hiddenKinds.has(b.kind))
+    return filtered.slice(0, briefingCollapsed ? 1 : 6)
+  }, [game, hiddenKinds, briefingCollapsed])
+
   if (!game) return null
-  const entries = game.briefing.slice(0, briefingCollapsed ? 1 : 6)
+  const visibleKinds = (Object.keys(KIND_LABELS) as BriefingKind[]).filter(
+    (k) => !hiddenKinds.has(k)
+  )
+  const filterActive = hiddenKinds.size > 0
+
+  function toggleKind(kind: BriefingKind) {
+    setHiddenKinds((prev) => {
+      const next = new Set(prev)
+      if (next.has(kind)) next.delete(kind)
+      else next.add(kind)
+      return next
+    })
+  }
+
+  function clearFilters() {
+    setHiddenKinds(new Set())
+  }
 
   return (
     <div className="w-80 rounded-tl-md border-t border-l bg-background/90 shadow-lg backdrop-blur-sm">
-      <button
-        type="button"
-        onClick={toggleBriefing}
-        className="flex w-full items-center justify-between border-b px-3 py-1.5 text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        title="Toggle briefing (B)"
-      >
-        <span>Briefing</span>
-        <span className="text-muted-foreground">{briefingCollapsed ? "▴" : "▾"}</span>
-      </button>
+      <div className="flex items-center justify-between border-b">
+        <button
+          type="button"
+          onClick={toggleBriefing}
+          className="flex flex-1 items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          title="Toggle briefing (B)"
+        >
+          <span>
+            Briefing{" "}
+            {filterActive && !briefingCollapsed ? (
+              <span className="text-muted-foreground">
+                · {visibleKinds.length}/{Object.keys(KIND_LABELS).length}
+              </span>
+            ) : null}
+          </span>
+          <span className="text-muted-foreground">
+            {briefingCollapsed ? "▴" : "▾"}
+          </span>
+        </button>
+        {!briefingCollapsed && (
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className={cn(
+              "border-l px-2 py-1.5 text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              filterActive ? "text-primary" : "text-muted-foreground"
+            )}
+            aria-pressed={filtersOpen}
+            title="Filter briefing"
+          >
+            <FilterIcon className="size-3.5" />
+          </button>
+        )}
+      </div>
+      {filtersOpen && !briefingCollapsed ? (
+        <div className="flex flex-wrap items-center gap-1 border-b bg-muted/40 px-2 py-1.5">
+          {(Object.keys(KIND_LABELS) as BriefingKind[]).map((k) => {
+            const visible = !hiddenKinds.has(k)
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => toggleKind(k)}
+                className={cn(
+                  "rounded-sm px-1.5 py-0.5 text-[10px] uppercase tracking-wide transition-colors",
+                  visible
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground line-through opacity-60"
+                )}
+              >
+                {KIND_LABELS[k]}
+              </button>
+            )
+          })}
+          {filterActive ? (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {entries.length === 0 ? (
         <p className="px-3 py-2 text-xs text-muted-foreground">
-          No briefings yet.
+          {filterActive
+            ? "No briefings match the current filter."
+            : "No briefings yet."}
         </p>
       ) : (
         <ul className="max-h-56 divide-y overflow-y-auto">

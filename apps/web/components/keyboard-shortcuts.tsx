@@ -16,6 +16,9 @@ export function KeyboardShortcuts() {
     decisionsOpen,
     toggleDecisions,
     closeDecisions,
+    diplomacyOpen,
+    toggleDiplomacy,
+    closeDiplomacy,
     openPauseMenu,
     toggleBriefing,
   } = useHudState()
@@ -40,6 +43,11 @@ export function KeyboardShortcuts() {
         if (decisionsOpen) {
           e.preventDefault()
           closeDecisions()
+          return
+        }
+        if (diplomacyOpen) {
+          e.preventDefault()
+          closeDiplomacy()
           return
         }
         if (statsOpen) {
@@ -87,6 +95,11 @@ export function KeyboardShortcuts() {
           toggleBriefing()
           break
         }
+        case "g":
+        case "G": {
+          toggleDiplomacy()
+          break
+        }
       }
     }
 
@@ -102,6 +115,9 @@ export function KeyboardShortcuts() {
     decisionsOpen,
     toggleDecisions,
     closeDecisions,
+    diplomacyOpen,
+    toggleDiplomacy,
+    closeDiplomacy,
     openPauseMenu,
     toggleBriefing,
   ])

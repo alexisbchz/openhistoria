@@ -1,6 +1,6 @@
 "use client"
 
-import { listMinisters, type Minister } from "@workspace/engine"
+import { listMinisters, type Minister, type MinisterBonus } from "@workspace/engine"
 import {
   Sheet,
   SheetContent,
@@ -59,11 +59,53 @@ export function CabinetSheet({
                 <p className="mt-1 text-xs leading-snug text-muted-foreground">
                   {m.portfolio}
                 </p>
+                {m.bonus ? <MinisterBonusList bonus={m.bonus} /> : null}
               </div>
             </li>
           ))}
         </ul>
       </SheetContent>
     </Sheet>
+  )
+}
+
+function MinisterBonusList({ bonus }: { bonus: MinisterBonus }) {
+  const items: string[] = []
+  if (bonus.bondApprovalMultiplier && bonus.bondApprovalMultiplier !== 1) {
+    items.push(
+      `Bonds cost ${Math.round((1 - bonus.bondApprovalMultiplier) * 100)}% less approval`
+    )
+  }
+  if (bonus.bondDebtMultiplier && bonus.bondDebtMultiplier !== 1) {
+    items.push(
+      `Bonds add ${Math.round((1 - bonus.bondDebtMultiplier) * 100)}% less debt/GDP`
+    )
+  }
+  if (bonus.approvalPerDay) {
+    const yearly = (bonus.approvalPerDay * 365).toFixed(1)
+    items.push(
+      `+${bonus.approvalPerDay.toFixed(2)} approval / day (~${yearly}/yr)`
+    )
+  }
+  if (bonus.diplomacyDriftMultiplier && bonus.diplomacyDriftMultiplier !== 1) {
+    items.push(
+      `Opinion drift ×${bonus.diplomacyDriftMultiplier.toFixed(2)}`
+    )
+  }
+  if (bonus.projectCompletionApprovalBonus) {
+    const kinds = bonus.projectCompletionApprovalBonus.kinds
+      .map((k) => k.replace("construction:", ""))
+      .join(", ")
+    items.push(
+      `+${bonus.projectCompletionApprovalBonus.delta} approval on completing ${kinds} projects`
+    )
+  }
+  if (items.length === 0) return null
+  return (
+    <ul className="mt-1.5 grid gap-0.5 text-[11px] leading-snug text-emerald-500">
+      {items.map((it) => (
+        <li key={it}>· {it}</li>
+      ))}
+    </ul>
   )
 }
