@@ -23,7 +23,12 @@ import {
   simulateAiTick,
   type AiAction,
 } from "./ai-nations"
-import { getCabinetEffects } from "./cabinet"
+import {
+  getCabinetEffects,
+  isValidAppointment,
+  listMinisters,
+  type CabinetAppointments,
+} from "./cabinet"
 
 export type NationCode = "FR"
 export type CharacterId = "macron"
@@ -187,6 +192,8 @@ export interface GameSnapshot {
    * line instead of one every tick.
    */
   triggeredWarnings: string[]
+  /** Active cabinet appointments: roleId -> candidate id. */
+  cabinet?: Record<string, string>
 }
 
 export type BriefingKind =
@@ -227,10 +234,11 @@ interface GameFields {
   bankruptcyDays: number
   impeachmentDays: number
   triggeredWarnings: ReadonlySet<string>
+  cabinet: CabinetAppointments
 }
 
 const countryStatsProvider = new CountryStatsProvider()
-const MAX_BRIEFING = 50
+const MAX_BRIEFING = 200
 const MAX_HISTORY = 60 // ~1y at weekly cadence + buffer
 const INITIAL_APPROVAL = 38
 const INITIAL_TREASURY_MILLIONS = -2_000
@@ -314,6 +322,7 @@ export class Game {
   readonly bankruptcyDays: number
   readonly impeachmentDays: number
   readonly triggeredWarnings: ReadonlySet<string>
+  readonly cabinet: CabinetAppointments
 
   constructor(init: GameFields) {
     this.nation = init.nation
@@ -336,6 +345,7 @@ export class Game {
     this.bankruptcyDays = init.bankruptcyDays
     this.impeachmentDays = init.impeachmentDays
     this.triggeredWarnings = init.triggeredWarnings
+    this.cabinet = init.cabinet
   }
 
   static createNew(): Game {
@@ -377,6 +387,7 @@ export class Game {
       bankruptcyDays: 0,
       impeachmentDays: 0,
       triggeredWarnings: new Set<string>(),
+      cabinet: {},
     })
   }
 
@@ -402,8 +413,27 @@ export class Game {
       bankruptcyDays: this.bankruptcyDays,
       impeachmentDays: this.impeachmentDays,
       triggeredWarnings: this.triggeredWarnings,
+      cabinet: this.cabinet,
       ...overrides,
     })
+  }
+
+  appointMinister(roleId: string, candidateId: string): Game {
+    if (this.gameOver) return this
+    if (!isValidAppointment(this.nation, roleId, candidateId)) {
+      return this
+    }
+    if (this.cabinet[roleId] === candidateId) return this
+    const next = { ...this.cabinet, [roleId]: candidateId }
+    const candidate = listMinisters(this.nation, next).find(
+      (m) => m.roleId === roleId
+    )
+    const briefing = pushTo(this.briefing, makeBriefing(this.date, {
+      kind: "milestone",
+      title: `Cabinet reshuffle: ${candidate?.role ?? roleId}`,
+      detail: candidate ? `${candidate.name} (${candidate.party}) takes the role.` : undefined,
+    }))
+    return this.with({ cabinet: next, briefing })
   }
 
   setReformAgenda(id: ReformAgendaId): Game {
@@ -531,7 +561,7 @@ export class Game {
       BOND_HARD_DEBT_CAP_PCT - BOND_STRESS_DEBT_PCT
     )
     const stress = 1 + Math.min(2, (overshoot / stressSpan) * 2)
-    const cabinet = getCabinetEffects(this.nation)
+    const cabinet = getCabinetEffects(this.nation, this.cabinet)
     const debtDelta =
       BOND_DEBT_DELTA_PER_BILLION * billions * stress * cabinet.bondDebtMultiplier
     const approvalCost =
@@ -774,7 +804,7 @@ export class Game {
       days
     )
 
-    const cabinet = getCabinetEffects(this.nation)
+    const cabinet = getCabinetEffects(this.nation, this.cabinet)
     let projects = this.projects
     let approval = econ.approval
     // Passive daily approval contribution from the cabinet (e.g. PM lift).
@@ -1078,6 +1108,7 @@ export class Game {
       bankruptcyDays: this.bankruptcyDays,
       impeachmentDays: this.impeachmentDays,
       triggeredWarnings: Array.from(this.triggeredWarnings),
+      cabinet: { ...this.cabinet },
     }
   }
 
@@ -1107,6 +1138,7 @@ export class Game {
         bankruptcyDays: s.bankruptcyDays ?? 0,
         impeachmentDays: s.impeachmentDays ?? 0,
         triggeredWarnings: new Set(s.triggeredWarnings ?? []),
+        cabinet: s.cabinet ?? {},
       })
     }
     return migrateLegacy(snapshot)
@@ -1211,6 +1243,7 @@ function migrateLegacy(snapshot: AnySnapshot): Game {
       bankruptcyDays: 0,
       impeachmentDays: 0,
       triggeredWarnings: new Set<string>(),
+      cabinet: {},
     })
   }
   if ((snapshot as LegacyV3Snapshot).version === 3) {
@@ -1237,6 +1270,7 @@ function migrateLegacy(snapshot: AnySnapshot): Game {
       bankruptcyDays: 0,
       impeachmentDays: 0,
       triggeredWarnings: new Set<string>(),
+      cabinet: {},
     })
   }
   if ((snapshot as LegacyV2Snapshot).version === 2) {
@@ -1263,6 +1297,7 @@ function migrateLegacy(snapshot: AnySnapshot): Game {
       bankruptcyDays: 0,
       impeachmentDays: 0,
       triggeredWarnings: new Set<string>(),
+      cabinet: {},
     })
   }
   const s = snapshot as LegacyV1Snapshot
@@ -1300,6 +1335,7 @@ function migrateLegacy(snapshot: AnySnapshot): Game {
     bankruptcyDays: 0,
     impeachmentDays: 0,
     triggeredWarnings: new Set<string>(),
+    cabinet: {},
   })
 }
 

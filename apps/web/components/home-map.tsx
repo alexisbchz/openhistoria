@@ -9,6 +9,7 @@ import {
 } from "@workspace/ui/components/map"
 
 import { BriefingPanel } from "@/components/briefing-panel"
+import { ElectionPoll } from "@/components/election-poll"
 import { HomeHud } from "@/components/home-hud"
 import { MapCities } from "@/components/map-cities"
 import { MapCountryLabels } from "@/components/map-country-labels"
@@ -80,6 +81,7 @@ export function HomeMap() {
           <HomeHud
             bottomRight={
               <div className="flex flex-col items-end gap-2">
+                <ElectionPoll />
                 <TrendStrip />
                 <BriefingPanel />
                 <TimeControls />

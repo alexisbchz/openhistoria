@@ -178,6 +178,29 @@ export function getAiProfile(code: string): AiNationProfile | null {
   return PROFILE_INDEX[code.trim().toUpperCase()] ?? null
 }
 
+/**
+ * Stable AI-to-AI alignment groups, surfaced in the diplomacy panel. These
+ * don't currently drive simulation — the AI tick still treats each nation
+ * independently — they're context for the player.
+ */
+export interface AiBloc {
+  id: string
+  name: string
+  members: string[]
+}
+
+export const AI_BLOCS: readonly AiBloc[] = [
+  { id: "anglosphere", name: "Anglosphere", members: ["US", "GB", "AU", "CA"] },
+  { id: "eurogroup", name: "EU core", members: ["DE", "IT", "ES"] },
+  { id: "brics-leaning", name: "BRICS-leaning", members: ["RU", "CN", "BR", "IN"] },
+  { id: "indo-pacific", name: "Indo-Pacific partners", members: ["JP", "AU", "IN"] },
+]
+
+export function getBlocsForNation(code: string): AiBloc[] {
+  const key = code.trim().toUpperCase()
+  return AI_BLOCS.filter((b) => b.members.includes(key))
+}
+
 export interface ProjectReaction {
   code: string
   opinionDelta: number

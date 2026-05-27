@@ -85,22 +85,35 @@ export {
   setClock,
 } from "./clock"
 export type { Clock } from "./clock"
-export { getCabinetEffects, listMinisters } from "./cabinet"
-export type { CabinetEffects, Minister, MinisterBonus } from "./cabinet"
+export {
+  getCabinetEffects,
+  isValidAppointment,
+  listCabinetCandidates,
+  listMinisters,
+} from "./cabinet"
+export type {
+  CabinetAppointments,
+  CabinetEffects,
+  Minister,
+  MinisterBonus,
+} from "./cabinet"
 export {
   getSuggestionsForNation,
   PROJECT_KIND_LABELS,
 } from "./decision-suggestions"
 export type { DecisionSuggestion } from "./decision-suggestions"
 export {
+  AI_BLOCS,
   AI_NATIONS,
   computeProjectReactions,
   getAiProfile,
+  getBlocsForNation,
   simulateAiTick,
 } from "./ai-nations"
 export type {
   AiAction,
   AiActionKind,
+  AiBloc,
   AiNationProfile,
   AiStance,
   AiTickInput,

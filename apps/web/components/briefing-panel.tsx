@@ -10,6 +10,7 @@ import {
   HammerIcon,
   LandmarkIcon,
   NewspaperIcon,
+  SearchIcon,
   XCircleIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -47,6 +48,7 @@ export function BriefingPanel() {
   const game = useGame()
   const { briefingCollapsed, toggleBriefing } = useHudState()
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [query, setQuery] = useState("")
   // null = "all kinds"; otherwise the Set holds the kinds the player has
   // deselected (UI defaults to everything visible).
   const [hiddenKinds, setHiddenKinds] = useState<Set<BriefingKind>>(
@@ -55,18 +57,21 @@ export function BriefingPanel() {
 
   const entries = useMemo(() => {
     if (!game) return []
-    const filtered =
-      hiddenKinds.size === 0
-        ? game.briefing
-        : game.briefing.filter((b) => !hiddenKinds.has(b.kind))
-    return filtered.slice(0, briefingCollapsed ? 1 : 6)
-  }, [game, hiddenKinds, briefingCollapsed])
+    const needle = query.trim().toLowerCase()
+    const filtered = game.briefing.filter((b) => {
+      if (hiddenKinds.has(b.kind)) return false
+      if (!needle) return true
+      const hay = `${b.title} ${b.detail ?? ""}`.toLowerCase()
+      return hay.includes(needle)
+    })
+    return filtered.slice(0, briefingCollapsed ? 1 : 12)
+  }, [game, hiddenKinds, briefingCollapsed, query])
 
   if (!game) return null
   const visibleKinds = (Object.keys(KIND_LABELS) as BriefingKind[]).filter(
     (k) => !hiddenKinds.has(k)
   )
-  const filterActive = hiddenKinds.size > 0
+  const filterActive = hiddenKinds.size > 0 || query.trim().length > 0
 
   function toggleKind(kind: BriefingKind) {
     setHiddenKinds((prev) => {
@@ -79,6 +84,7 @@ export function BriefingPanel() {
 
   function clearFilters() {
     setHiddenKinds(new Set())
+    setQuery("")
   }
 
   return (
@@ -118,7 +124,28 @@ export function BriefingPanel() {
         )}
       </div>
       {filtersOpen && !briefingCollapsed ? (
-        <div className="flex flex-wrap items-center gap-1 border-b bg-muted/40 px-2 py-1.5">
+        <div className="grid gap-1.5 border-b bg-muted/40 px-2 py-1.5">
+          <div className="flex items-center gap-1.5 rounded-sm bg-background/80 px-1.5">
+            <SearchIcon className="size-3 text-muted-foreground" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search briefings…"
+              className="h-6 w-full bg-transparent text-[11px] placeholder:text-muted-foreground focus:outline-none"
+              aria-label="Search briefings"
+            />
+            {query ? (
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="text-[10px] text-muted-foreground hover:text-foreground"
+              >
+                clear
+              </button>
+            ) : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
           {(Object.keys(KIND_LABELS) as BriefingKind[]).map((k) => {
             const visible = !hiddenKinds.has(k)
             return (
@@ -146,6 +173,7 @@ export function BriefingPanel() {
               Clear
             </button>
           ) : null}
+          </div>
         </div>
       ) : null}
       {entries.length === 0 ? (
@@ -155,7 +183,7 @@ export function BriefingPanel() {
             : "No briefings yet."}
         </p>
       ) : (
-        <ul className="max-h-56 divide-y overflow-y-auto">
+        <ul className="max-h-80 divide-y overflow-y-auto">
           {entries.map((entry) => (
             <BriefingRow key={entry.id} entry={entry} />
           ))}

@@ -44,6 +44,7 @@ interface GameActions {
   issueSanctions: (target: string) => void
   resolveEventChoice: (eventId: string, choiceId: string) => void
   setReformAgenda: (id: ReformAgendaId) => void
+  appointMinister: (roleId: string, candidateId: string) => void
   resetGame: () => void
   importGame: (raw: string) => { ok: true } | { ok: false; error: string }
   exportSnapshotJson: () => string | null
@@ -79,6 +80,7 @@ const noopActions: GameActions = {
   issueSanctions: () => {},
   resolveEventChoice: () => {},
   setReformAgenda: () => {},
+  appointMinister: () => {},
   resetGame: () => {},
   importGame: () => ({ ok: false, error: "Game provider not ready" }),
   exportSnapshotJson: () => null,
@@ -321,6 +323,18 @@ export function GameProvider({ children }: { children: ReactNode }) {
     [persist]
   )
 
+  const appointMinister = useCallback(
+    (roleId: string, candidateId: string) => {
+      setGame((current) => {
+        if (!current) return current
+        const next = current.appointMinister(roleId, candidateId)
+        persist(next)
+        return next
+      })
+    },
+    [persist]
+  )
+
   const resetGame = useCallback(() => {
     clearGame()
     clearQuarantine()
@@ -466,6 +480,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
         issueSanctions,
         resolveEventChoice,
         setReformAgenda,
+        appointMinister,
         resetGame,
         importGame,
         exportSnapshotJson,
@@ -489,6 +504,7 @@ export function GameProvider({ children }: { children: ReactNode }) {
       issueSanctions,
       resolveEventChoice,
       setReformAgenda,
+      appointMinister,
       resetGame,
       importGame,
       exportSnapshotJson,

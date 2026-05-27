@@ -10,6 +10,7 @@ import {
   TooltipTrigger,
 } from "@workspace/ui/components/tooltip"
 
+import { AchievementWatcher } from "@/components/achievements"
 import { BriefingToasts } from "@/components/briefing-toasts"
 import { CountryInfoPanel } from "@/components/country-info-panel"
 import { CountryStatsPanel } from "@/components/country-stats-panel"
@@ -93,6 +94,7 @@ function HudShell({
       <WelcomeDialog />
       <PauseMenu />
       <BriefingToasts />
+      <AchievementWatcher />
       <DebugOverlay />
     </div>
   )

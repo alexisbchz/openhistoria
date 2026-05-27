@@ -1,6 +1,6 @@
 "use client"
 
-import { AI_NATIONS } from "@workspace/engine"
+import { AI_NATIONS, getBlocsForNation } from "@workspace/engine"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
 import {
@@ -101,13 +101,22 @@ function DiplomacyRowItem({ row, today }: { row: DiplomacyRow; today: number }) 
     <li className="grid grid-cols-[auto_1fr] items-center gap-3 px-3 py-2 text-xs">
       <CountryFlag code={row.code} className="h-4 w-auto rounded-[2px] ring-1 ring-black/20" />
       <div className="min-w-0">
-        <div className="flex items-baseline gap-1.5">
+        <div className="flex flex-wrap items-baseline gap-1.5">
           <span className="truncate font-medium">{row.name}</span>
           {row.allied ? (
             <span className="rounded-sm bg-emerald-500/15 px-1 py-px text-[9px] font-semibold uppercase text-emerald-500">
               Allied
             </span>
           ) : null}
+          {getBlocsForNation(row.code).map((b) => (
+            <span
+              key={b.id}
+              className="rounded-sm bg-muted px-1 py-px text-[9px] font-medium uppercase tracking-wide text-muted-foreground"
+              title={`Bloc: ${b.members.join(", ")}`}
+            >
+              {b.name}
+            </span>
+          ))}
         </div>
         <div className="relative mt-1 h-1.5 w-full rounded-full bg-muted">
           <div
