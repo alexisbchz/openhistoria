@@ -27,7 +27,12 @@ export function TimeControls() {
   if (!game) return null
 
   const triggeredIds = new Set(game.triggeredEvents.map((t) => t.id))
-  const nextEvent = getNextEvent(game.date, game.nation, triggeredIds)
+  const nextEvent = getNextEvent(
+    game.date,
+    game.nation,
+    triggeredIds,
+    game.triggeredEvents
+  )
   const daysUntilNext = nextEvent
     ? Math.max(
         0,

@@ -843,7 +843,7 @@ export class Game {
     const triggeredIds = new Set(triggeredEvents.map((t) => t.id))
     let pendingEvent: EventDefinition | null = this.pendingEvent
     if (!pendingEvent) {
-      const due = getDueEvent(newDate, this.nation, triggeredIds)
+      const due = getDueEvent(newDate, this.nation, triggeredIds, triggeredEvents)
       const generated = due
         ? null
         : maybeGenerateProceduralEvent({

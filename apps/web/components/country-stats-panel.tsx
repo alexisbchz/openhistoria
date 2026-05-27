@@ -74,7 +74,12 @@ export function CountryStatsPanel() {
   const nextEvent = useMemo(
     () =>
       game
-        ? getNextEvent(game.date, game.nation, new Set(game.triggeredEvents.map((t) => t.id)))
+        ? getNextEvent(
+            game.date,
+            game.nation,
+            new Set(game.triggeredEvents.map((t) => t.id)),
+            game.triggeredEvents
+          )
         : null,
     [game]
   )

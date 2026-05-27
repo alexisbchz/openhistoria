@@ -9,6 +9,7 @@ import {
   FilterIcon,
   HammerIcon,
   LandmarkIcon,
+  ListIcon,
   NewspaperIcon,
   SearchIcon,
   XCircleIcon,
@@ -48,6 +49,7 @@ export function BriefingPanel() {
   const game = useGame()
   const { briefingCollapsed, toggleBriefing } = useHudState()
   const [filtersOpen, setFiltersOpen] = useState(false)
+  const [view, setView] = useState<"briefing" | "press">("briefing")
   const [query, setQuery] = useState("")
   // null = "all kinds"; otherwise the Set holds the kinds the player has
   // deselected (UI defaults to everything visible).
@@ -109,18 +111,37 @@ export function BriefingPanel() {
           </span>
         </button>
         {!briefingCollapsed && (
-          <button
-            type="button"
-            onClick={() => setFiltersOpen((v) => !v)}
-            className={cn(
-              "border-l px-2 py-1.5 text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              filterActive ? "text-primary" : "text-muted-foreground"
-            )}
-            aria-pressed={filtersOpen}
-            title="Filter briefing"
-          >
-            <FilterIcon className="size-3.5" />
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={() =>
+                setView((v) => (v === "briefing" ? "press" : "briefing"))
+              }
+              className="border-l px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              aria-pressed={view === "press"}
+              title={
+                view === "press" ? "Show briefing list" : "Show press headlines"
+              }
+            >
+              {view === "press" ? (
+                <ListIcon className="size-3.5" />
+              ) : (
+                <NewspaperIcon className="size-3.5" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((v) => !v)}
+              className={cn(
+                "border-l px-2 py-1.5 text-xs hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                filterActive ? "text-primary" : "text-muted-foreground"
+              )}
+              aria-pressed={filtersOpen}
+              title="Filter briefing"
+            >
+              <FilterIcon className="size-3.5" />
+            </button>
+          </>
         )}
       </div>
       {filtersOpen && !briefingCollapsed ? (
@@ -182,6 +203,12 @@ export function BriefingPanel() {
             ? "No briefings match the current filter."
             : "No briefings yet."}
         </p>
+      ) : view === "press" ? (
+        <ul className="max-h-80 divide-y overflow-y-auto">
+          {entries.map((entry) => (
+            <PressHeadline key={entry.id} entry={entry} />
+          ))}
+        </ul>
       ) : (
         <ul className="max-h-80 divide-y overflow-y-auto">
           {entries.map((entry) => (
@@ -211,6 +238,51 @@ function BriefingRow({ entry }: { entry: BriefingEntry }) {
           <div className="text-muted-foreground">{entry.detail}</div>
         )}
       </div>
+    </li>
+  )
+}
+
+const PRESS_RUBRIC: Record<BriefingKind, string> = {
+  event: "BREAKING",
+  project_completed: "INFRASTRUCTURE",
+  project_started: "ANNOUNCEMENT",
+  project_cancelled: "RETRACTION",
+  milestone: "POLITICS",
+  warning: "ALERT",
+  treasury: "MARKETS",
+}
+
+const PRESS_RUBRIC_COLOR: Record<BriefingKind, string> = {
+  event: "text-primary",
+  project_completed: "text-emerald-500",
+  project_started: "text-muted-foreground",
+  project_cancelled: "text-muted-foreground",
+  milestone: "text-muted-foreground",
+  warning: "text-destructive",
+  treasury: "text-amber-500",
+}
+
+function PressHeadline({ entry }: { entry: BriefingEntry }) {
+  return (
+    <li className="px-3 py-2">
+      <div className="flex items-baseline gap-2">
+        <span
+          className={`shrink-0 text-[9px] font-bold uppercase tracking-widest ${PRESS_RUBRIC_COLOR[entry.kind]}`}
+        >
+          {PRESS_RUBRIC[entry.kind] ?? "NEWS"}
+        </span>
+        <span className="shrink-0 text-[10px] text-muted-foreground tabular-nums">
+          {dateFormatter.format(new Date(entry.date))}
+        </span>
+      </div>
+      <div className="mt-0.5 font-serif text-[13px] font-semibold leading-snug">
+        {entry.title}
+      </div>
+      {entry.detail ? (
+        <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+          {entry.detail}
+        </p>
+      ) : null}
     </li>
   )
 }

@@ -28,6 +28,13 @@ export interface EventChoice {
   effects: EventEffects
 }
 
+export interface EventPrecondition {
+  /** Event id that must have already been resolved. */
+  eventId: string
+  /** If set, that event's chosen choice id must match for the trigger to fire. */
+  choiceId?: string
+}
+
 export interface EventDefinition {
   id: string
   nation: NationCode
@@ -42,6 +49,12 @@ export interface EventDefinition {
    * surfaced via the briefing log only.
    */
   severity?: EventSeverity
+  /**
+   * Optional precondition: only fire when a previous event resolved a certain
+   * way. Lets us hand-author short narrative chains without a full scripting
+   * language.
+   */
+  requires?: EventPrecondition
   choices: EventChoice[]
   /** Optional index of the choice the cabinet picks when severity < high. */
   defaultChoiceIndex?: number
@@ -189,6 +202,67 @@ export const EVENT_LIBRARY: readonly EventDefinition[] = [
         id: "energy-package",
         label: "Cap fuel prices via emergency subsidy",
         effects: { treasury: -2500, approval: 4, inflationDelta: -0.3 },
+      },
+    ],
+  },
+  {
+    // Follow-up to the rail strike: if the player chose "hold-firm", the
+    // SNCF unions escalate to a general strike six weeks later.
+    id: "fr-2026-rail-strike-escalation",
+    nation: "FR",
+    category: "social",
+    severity: "high",
+    date: "2026-11-05",
+    title: "SNCF dispute spirals into a general strike",
+    description:
+      "After being requisitioned in September, rail workers have rallied other public-sector unions. A 24-hour general strike paralyses transport and schools.",
+    requires: {
+      eventId: "fr-2026-rail-strike",
+      choiceId: "hold-firm",
+    },
+    choices: [
+      {
+        id: "concede",
+        label: "Concede on bonuses and back-pay (€2B)",
+        effects: { treasury: -2000, approval: 4, unemploymentDelta: -0.05 },
+      },
+      {
+        id: "force",
+        label: "Use article 49.3, force adoption",
+        effects: { approval: -6, gdpDelta: -800 },
+      },
+    ],
+  },
+  {
+    // Follow-up to EU summit: if the player championed the defence fund,
+    // Berlin reciprocates with a joint industrial project.
+    id: "fr-2026-franco-german-industrial",
+    nation: "FR",
+    category: "opportunity",
+    severity: "high",
+    date: "2026-12-05",
+    title: "Berlin proposes a Franco-German hydrogen plant",
+    description:
+      "Following your EU defence-fund leadership, Chancellor Merz offers a joint €6B green-hydrogen plant on the Rhine, evenly co-financed.",
+    requires: {
+      eventId: "fr-2026-eu-summit",
+      choiceId: "champion",
+    },
+    choices: [
+      {
+        id: "accept",
+        label: "Co-finance the project (50/50)",
+        effects: { treasury: -3000, gdpDelta: 4500, approval: 3 },
+      },
+      {
+        id: "negotiate-down",
+        label: "Negotiate down to a smaller pilot",
+        effects: { treasury: -1200, gdpDelta: 1500, approval: 1 },
+      },
+      {
+        id: "decline",
+        label: "Decline; preserve fiscal room",
+        effects: { approval: -2 },
       },
     ],
   },
@@ -382,10 +456,25 @@ function utcDayStart(date: Date): number {
   )
 }
 
+function preconditionSatisfied(
+  e: EventDefinition,
+  triggeredEvents?: readonly TriggeredEvent[]
+): boolean {
+  if (!e.requires) return true
+  if (!triggeredEvents) return false
+  const match = triggeredEvents.find((t) => t.id === e.requires!.eventId)
+  if (!match) return false
+  if (e.requires.choiceId && match.choiceId !== e.requires.choiceId) {
+    return false
+  }
+  return true
+}
+
 export function getNextEvent(
   fromDate: Date,
   nation: NationCode,
-  triggeredIds: ReadonlySet<string>
+  triggeredIds: ReadonlySet<string>,
+  triggeredEvents?: readonly TriggeredEvent[]
 ): EventDefinition | null {
   const fromMs = utcDayStart(fromDate)
   return (
@@ -393,7 +482,8 @@ export function getNextEvent(
       .filter((e) => {
         if (triggeredIds.has(e.id)) return false
         const ts = eventDateToUtcMs(e.date)
-        return Number.isFinite(ts) && ts >= fromMs
+        if (!Number.isFinite(ts) || ts < fromMs) return false
+        return preconditionSatisfied(e, triggeredEvents)
       })
       .sort(
         (a, b) => eventDateToUtcMs(a.date) - eventDateToUtcMs(b.date)
@@ -404,7 +494,8 @@ export function getNextEvent(
 export function getDueEvent(
   date: Date,
   nation: NationCode,
-  triggeredIds: ReadonlySet<string>
+  triggeredIds: ReadonlySet<string>,
+  triggeredEvents?: readonly TriggeredEvent[]
 ): EventDefinition | null {
   const ms = utcDayStart(date)
   return (
@@ -412,7 +503,8 @@ export function getDueEvent(
       .filter((e) => {
         if (triggeredIds.has(e.id)) return false
         const ts = eventDateToUtcMs(e.date)
-        return Number.isFinite(ts) && ts <= ms
+        if (!Number.isFinite(ts) || ts > ms) return false
+        return preconditionSatisfied(e, triggeredEvents)
       })
       .sort(
         (a, b) => eventDateToUtcMs(a.date) - eventDateToUtcMs(b.date)

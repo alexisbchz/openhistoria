@@ -12,6 +12,7 @@ import {
 
 import { AchievementWatcher } from "@/components/achievements"
 import { BriefingToasts } from "@/components/briefing-toasts"
+import { TutorialHints } from "@/components/tutorial-hints"
 import { CountryInfoPanel } from "@/components/country-info-panel"
 import { CountryStatsPanel } from "@/components/country-stats-panel"
 import { DebugOverlay } from "@/components/debug-overlay"
@@ -95,6 +96,7 @@ function HudShell({
       <PauseMenu />
       <BriefingToasts />
       <AchievementWatcher />
+      <TutorialHints />
       <DebugOverlay />
     </div>
   )

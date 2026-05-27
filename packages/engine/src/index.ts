@@ -70,6 +70,7 @@ export type {
   EventChoice,
   EventDefinition,
   EventEffects,
+  EventPrecondition,
   EventSeverity,
   TriggeredEvent,
 } from "./events"

@@ -18,6 +18,7 @@ import {
   MonitorIcon,
   MoonIcon,
   SunIcon,
+  TrophyIcon,
   UploadIcon,
   type LucideIcon,
 } from "lucide-react"
@@ -28,6 +29,7 @@ import { toast } from "sonner"
 import { useGame, useGameActions } from "@/components/game-provider"
 import { useHudState } from "@/components/hud-state"
 import { useMapLayers } from "@/components/map-layers-state"
+import { TrophyRoom } from "@/components/trophy-room"
 
 export function PauseMenu() {
   const { pauseMenuOpen, closePauseMenu } = useHudState()
@@ -35,6 +37,7 @@ export function PauseMenu() {
   const [confirmReset, setConfirmReset] = useState(false)
   const [debugOpen, setDebugOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [trophyOpen, setTrophyOpen] = useState(false)
 
   function handleOpenChange(open: boolean) {
     if (open) return
@@ -143,6 +146,13 @@ export function PauseMenu() {
               >
                 Reset game
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => setTrophyOpen(true)}
+              >
+                <TrophyIcon />
+                Achievements
+              </Button>
               <ThemePicker />
               <Button
                 variant="ghost"
@@ -160,6 +170,7 @@ export function PauseMenu() {
           Esc toggles this menu.
         </DialogFooter>
       </DialogContent>
+      <TrophyRoom open={trophyOpen} onOpenChange={setTrophyOpen} />
     </Dialog>
   )
 }
