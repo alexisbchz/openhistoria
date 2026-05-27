@@ -15,6 +15,7 @@ import {
   CheckIcon,
   CopyIcon,
   DownloadIcon,
+  FolderArchiveIcon,
   MonitorIcon,
   MoonIcon,
   SunIcon,
@@ -31,6 +32,7 @@ import { toast } from "sonner"
 import { useGame, useGameActions } from "@/components/game-provider"
 import { useHudState } from "@/components/hud-state"
 import { useMapLayers } from "@/components/map-layers-state"
+import { SaveSlotsDialog } from "@/components/save-slots-dialog"
 import { TrophyRoom } from "@/components/trophy-room"
 import { isMuted, setMuted, sfx } from "@/lib/sfx"
 
@@ -41,6 +43,7 @@ export function PauseMenu() {
   const [debugOpen, setDebugOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const [trophyOpen, setTrophyOpen] = useState(false)
+  const [slotsOpen, setSlotsOpen] = useState(false)
   const [muted, setMutedState] = useState<boolean>(() => isMuted())
 
   function handleOpenChange(open: boolean) {
@@ -136,6 +139,13 @@ export function PauseMenu() {
                   Import save
                 </Button>
               </div>
+              <Button
+                variant="outline"
+                onClick={() => setSlotsOpen(true)}
+              >
+                <FolderArchiveIcon />
+                Save slots
+              </Button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -188,6 +198,7 @@ export function PauseMenu() {
         </DialogFooter>
       </DialogContent>
       <TrophyRoom open={trophyOpen} onOpenChange={setTrophyOpen} />
+      <SaveSlotsDialog open={slotsOpen} onOpenChange={setSlotsOpen} />
     </Dialog>
   )
 }

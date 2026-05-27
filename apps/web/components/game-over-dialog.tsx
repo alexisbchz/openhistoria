@@ -1,6 +1,10 @@
 "use client"
 
-import type { GameOverCause, HistorySample } from "@workspace/engine"
+import {
+  buildRetrospective,
+  type GameOverCause,
+  type HistorySample,
+} from "@workspace/engine"
 import { Button } from "@workspace/ui/components/button"
 import {
   Dialog,
@@ -77,11 +81,12 @@ export function GameOverDialog() {
     (game.gameOver.outcome === "won" ? "election_won" : "election_lost")
   const theme = CAUSE_THEMES[cause]
   const Icon = theme.Icon
+  const retro = buildRetrospective(game)
 
   return (
     <Dialog open={true} onOpenChange={() => {}} disablePointerDismissal>
       <DialogContent
-        className="sm:max-w-md"
+        className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"
         showCloseButton={false}
       >
         <DialogHeader>
@@ -90,8 +95,34 @@ export function GameOverDialog() {
             <span>{dateFormatter.format(new Date(game.gameOver.date))}</span>
           </div>
           <DialogTitle className={theme.accent}>{theme.title}</DialogTitle>
-          <DialogDescription>{game.gameOver.reason}</DialogDescription>
+          <DialogDescription className="font-serif text-base font-medium leading-snug text-foreground">
+            {retro.headline}
+          </DialogDescription>
+          <p className="text-xs text-muted-foreground">{game.gameOver.reason}</p>
         </DialogHeader>
+        <div className="grid gap-2 rounded-md border bg-muted/20 p-3 text-sm leading-relaxed">
+          {retro.paragraphs.map((para, i) => (
+            <p key={i}>{para}</p>
+          ))}
+        </div>
+        {retro.moments.length > 0 ? (
+          <div>
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Key moments
+            </div>
+            <ul className="grid gap-0.5 text-xs">
+              {retro.moments.map((m) => (
+                <li key={`${m.date}-${m.title}`} className="grid grid-cols-[auto_1fr_auto] items-baseline gap-2">
+                  <span className="tabular-nums text-muted-foreground">{m.date}</span>
+                  <span className="truncate">{m.title}</span>
+                  {m.choice ? (
+                    <span className="text-muted-foreground">→ {m.choice}</span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         <div className="grid grid-cols-2 gap-2 text-sm">
           <Stat label="Final approval" value={`${game.approval.toFixed(0)}%`} />
           <Stat

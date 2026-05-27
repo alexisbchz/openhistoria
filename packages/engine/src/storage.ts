@@ -4,6 +4,25 @@ import { Game, type GameSnapshot } from "./game"
 
 const STORAGE_KEY = "openhistoria:save"
 const QUARANTINE_KEY = "openhistoria:save.bak"
+const SLOT_KEY_PREFIX = "openhistoria:slot:"
+export const SAVE_SLOT_IDS = ["slot-1", "slot-2", "slot-3"] as const
+export type SaveSlotId = (typeof SAVE_SLOT_IDS)[number]
+
+export interface SaveSlotEntry {
+  id: SaveSlotId
+  /** ISO timestamp when the slot was last written. */
+  savedAt: string
+  /** In-game date inside the snapshot for quick display. */
+  gameDate: string
+  /** Friendly free-text label. */
+  label: string
+}
+
+interface SlotPayload {
+  savedAt: string
+  label: string
+  snapshot: GameSnapshot
+}
 
 export type StorageError =
   | { kind: "no_window" }
@@ -101,6 +120,76 @@ export function clearGame(): void {
 export function clearQuarantine(): void {
   if (typeof window === "undefined") return
   window.localStorage.removeItem(QUARANTINE_KEY)
+}
+
+function slotKey(id: SaveSlotId): string {
+  return `${SLOT_KEY_PREFIX}${id}`
+}
+
+/** Persist a snapshot into a named slot. Never throws. */
+export function saveToSlot(
+  id: SaveSlotId,
+  game: Game,
+  label: string
+): Result<void, StorageError> {
+  if (typeof window === "undefined") return err({ kind: "no_window" })
+  const payload: SlotPayload = {
+    savedAt: new Date().toISOString(),
+    label,
+    snapshot: game.toSnapshot(),
+  }
+  return Result.fromThrowable(
+    (s: string) => window.localStorage.setItem(slotKey(id), s),
+    toQuotaError
+  )(JSON.stringify(payload)).map(() => undefined)
+}
+
+/** List the metadata for each populated slot, in declared order. */
+export function listSaveSlots(): SaveSlotEntry[] {
+  if (typeof window === "undefined") return []
+  const out: SaveSlotEntry[] = []
+  for (const id of SAVE_SLOT_IDS) {
+    const raw = window.localStorage.getItem(slotKey(id))
+    if (!raw) continue
+    const parsed = Result.fromThrowable(
+      (s: string) => JSON.parse(s) as SlotPayload,
+      () => null
+    )(raw)
+    if (parsed.isErr() || !parsed.value) continue
+    const payload = parsed.value
+    out.push({
+      id,
+      savedAt: payload.savedAt,
+      gameDate: payload.snapshot.date,
+      label: payload.label,
+    })
+  }
+  return out
+}
+
+/** Load the game stored in a slot. Returns ok(null) when the slot is empty. */
+export function loadFromSlot(
+  id: SaveSlotId
+): Result<Game | null, StorageError> {
+  if (typeof window === "undefined") return err({ kind: "no_window" })
+  const raw = window.localStorage.getItem(slotKey(id))
+  if (!raw) return ok(null)
+  const parsed = Result.fromThrowable(
+    (s: string) => JSON.parse(s) as SlotPayload,
+    (e) => toQuarantineError("parse_error", raw, e)
+  )(raw)
+  if (parsed.isErr()) return err(parsed.error)
+  const built = Result.fromThrowable(
+    (snap: GameSnapshot) => Game.fromSnapshot(snap),
+    (e) => toQuarantineError("migration_error", raw, e)
+  )(parsed.value.snapshot)
+  if (built.isErr()) return err(built.error)
+  return ok(built.value)
+}
+
+export function clearSlot(id: SaveSlotId): void {
+  if (typeof window === "undefined") return
+  window.localStorage.removeItem(slotKey(id))
 }
 
 function quarantine(raw: string): void {

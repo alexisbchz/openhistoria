@@ -4,10 +4,14 @@ import { Game } from "../src/game"
 import {
   clearGame,
   clearQuarantine,
+  clearSlot,
+  listSaveSlots,
+  loadFromSlot,
   loadGame,
   loadGameResult,
   loadGameWithStatus,
   saveGame,
+  saveToSlot,
 } from "../src/storage"
 import { useDeterministicEngine } from "./helpers"
 
@@ -111,6 +115,33 @@ describe("storage round-trip", () => {
   it("saveGame returns a Result; mapping happens via the ok branch", () => {
     const result = saveGame(Game.createNew())
     expect(result.isOk()).toBe(true)
+  })
+
+  it("save slots: write / list / load / clear round-trip", () => {
+    const game = Game.createNew().with({ treasury: 7777 })
+    const saved = saveToSlot("slot-1", game, "Mid-term")
+    expect(saved.isOk()).toBe(true)
+
+    const list = listSaveSlots()
+    expect(list).toHaveLength(1)
+    expect(list[0]?.id).toBe("slot-1")
+    expect(list[0]?.label).toBe("Mid-term")
+    expect(list[0]?.savedAt).toMatch(/T/)
+
+    const loaded = loadFromSlot("slot-1")
+    expect(loaded.isOk()).toBe(true)
+    if (loaded.isOk() && loaded.value) {
+      expect(loaded.value.treasury).toBe(7777)
+    }
+
+    clearSlot("slot-1")
+    expect(listSaveSlots()).toHaveLength(0)
+  })
+
+  it("save slots: empty slot returns ok(null)", () => {
+    const result = loadFromSlot("slot-2")
+    expect(result.isOk()).toBe(true)
+    if (result.isOk()) expect(result.value).toBeNull()
   })
 
   it("sanitises NaN/Infinity in stored stats on load", () => {

@@ -36,6 +36,10 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Lint
+        continue-on-error: true
+        run: npm run lint
+
       - name: Test
         run: npm test
 

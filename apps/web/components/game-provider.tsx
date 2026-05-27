@@ -5,12 +5,18 @@ import {
   SPEED_MS_PER_DAY,
   clearGame,
   clearQuarantine,
+  clearSlot,
+  listSaveSlots,
+  loadFromSlot,
   loadGameWithStatus,
   saveGame,
+  saveToSlot,
   type DiplomaticMessageArgs,
   type GameSpeed,
   type Project,
   type ReformAgendaId,
+  type SaveSlotEntry,
+  type SaveSlotId,
 } from "@workspace/engine"
 import { Result } from "neverthrow"
 import {
@@ -48,6 +54,10 @@ interface GameActions {
   resetGame: () => void
   importGame: (raw: string) => { ok: true } | { ok: false; error: string }
   exportSnapshotJson: () => string | null
+  saveToSlot: (id: SaveSlotId, label: string) => { ok: true } | { ok: false; error: string }
+  loadFromSlot: (id: SaveSlotId) => { ok: true } | { ok: false; error: string }
+  clearSlot: (id: SaveSlotId) => void
+  listSaveSlots: () => SaveSlotEntry[]
 }
 
 interface TickStats {
@@ -84,6 +94,10 @@ const noopActions: GameActions = {
   resetGame: () => {},
   importGame: () => ({ ok: false, error: "Game provider not ready" }),
   exportSnapshotJson: () => null,
+  saveToSlot: () => ({ ok: false, error: "Game provider not ready" }),
+  loadFromSlot: () => ({ ok: false, error: "Game provider not ready" }),
+  clearSlot: () => {},
+  listSaveSlots: () => [],
 }
 
 const DEFAULT_TICK_STATS: TickStats = {
@@ -380,6 +394,38 @@ export function GameProvider({ children }: { children: ReactNode }) {
     return JSON.stringify(game.toSnapshot(), null, 2)
   }, [game])
 
+  const saveToSlotAction = useCallback(
+    (id: SaveSlotId, label: string): { ok: true } | { ok: false; error: string } => {
+      if (!game) return { ok: false, error: "No game loaded" }
+      const result = saveToSlot(id, game, label)
+      if (result.isErr()) {
+        return { ok: false, error: result.error.kind }
+      }
+      return { ok: true }
+    },
+    [game]
+  )
+
+  const loadFromSlotAction = useCallback(
+    (id: SaveSlotId): { ok: true } | { ok: false; error: string } => {
+      const result = loadFromSlot(id)
+      if (result.isErr()) return { ok: false, error: result.error.kind }
+      const loaded = result.value
+      if (!loaded) return { ok: false, error: "Slot is empty" }
+      saveGame(loaded)
+      lastSavedDateRef.current = loaded.date.getTime()
+      setGame(loaded)
+      return { ok: true }
+    },
+    []
+  )
+
+  const clearSlotAction = useCallback((id: SaveSlotId) => {
+    clearSlot(id)
+  }, [])
+
+  const listSaveSlotsAction = useCallback(() => listSaveSlots(), [])
+
   useEffect(() => {
     if (!game) return
     if (game.paused || game.gameOver || game.pendingEventId) return
@@ -484,6 +530,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
         resetGame,
         importGame,
         exportSnapshotJson,
+        saveToSlot: saveToSlotAction,
+        loadFromSlot: loadFromSlotAction,
+        clearSlot: clearSlotAction,
+        listSaveSlots: listSaveSlotsAction,
       },
     }),
     [
@@ -508,6 +558,10 @@ export function GameProvider({ children }: { children: ReactNode }) {
       resetGame,
       importGame,
       exportSnapshotJson,
+      saveToSlotAction,
+      loadFromSlotAction,
+      clearSlotAction,
+      listSaveSlotsAction,
     ]
   )
 

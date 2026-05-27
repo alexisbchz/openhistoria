@@ -4,6 +4,8 @@ export {
   REFORM_AGENDAS,
   SPEED_MS_PER_DAY,
 } from "./game"
+export { buildRetrospective } from "./retrospective"
+export type { Retrospective } from "./retrospective"
 export type {
   BriefingEntry,
   BriefingKind,
@@ -39,12 +41,22 @@ export type {
 export {
   clearGame,
   clearQuarantine,
+  clearSlot,
+  listSaveSlots,
+  loadFromSlot,
   loadGame,
   loadGameResult,
   loadGameWithStatus,
   saveGame,
+  saveToSlot,
+  SAVE_SLOT_IDS,
 } from "./storage"
-export type { LoadGameResult, StorageError } from "./storage"
+export type {
+  LoadGameResult,
+  SaveSlotEntry,
+  SaveSlotId,
+  StorageError,
+} from "./storage"
 export { CountryStatsProvider } from "./country-stats"
 export type {
   CountryStats,
