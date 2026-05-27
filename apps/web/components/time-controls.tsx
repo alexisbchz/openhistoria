@@ -1,9 +1,9 @@
 "use client"
 
-import type { GameSpeed } from "@workspace/engine"
+import { getNextEvent, type GameSpeed } from "@workspace/engine"
 import { Button } from "@workspace/ui/components/button"
 import { cn } from "@workspace/ui/lib/utils"
-import { PauseIcon, PlayIcon } from "lucide-react"
+import { CalendarClockIcon, PauseIcon, PlayIcon } from "lucide-react"
 
 import { useGame, useGameActions } from "@/components/game-provider"
 
@@ -15,17 +15,44 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
   day: "numeric",
 })
 
+const shortDate = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+})
+
 export function TimeControls() {
   const game = useGame()
   const { setSpeed, togglePause } = useGameActions()
 
   if (!game) return null
 
+  const triggeredIds = new Set(game.triggeredEvents.map((t) => t.id))
+  const nextEvent = getNextEvent(game.date, game.nation, triggeredIds)
+  const daysUntilNext = nextEvent
+    ? Math.max(
+        0,
+        Math.round(
+          (Date.parse(nextEvent.date) - game.date.getTime()) / 86_400_000
+        )
+      )
+    : null
+
   return (
     <div className="rounded-tl-md border-t border-l bg-background/85 px-3 py-2 shadow-lg backdrop-blur-sm">
       <div className="text-center text-sm font-semibold leading-tight tabular-nums">
         {dateFormatter.format(game.date)}
       </div>
+      {nextEvent && daysUntilNext !== null && (
+        <div
+          className="mt-1 flex items-center justify-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground"
+          title={nextEvent.title}
+        >
+          <CalendarClockIcon className="size-3" />
+          <span>
+            Next: {shortDate.format(new Date(nextEvent.date))} · {daysUntilNext}d
+          </span>
+        </div>
+      )}
       <div className="mt-2 flex items-center gap-2">
         <Button
           type="button"

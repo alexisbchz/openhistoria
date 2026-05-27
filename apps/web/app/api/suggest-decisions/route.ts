@@ -1,8 +1,7 @@
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
-import { generateObject } from "ai"
+import { getSuggestionsForNation, type NationCode } from "@workspace/engine"
 import { z } from "zod"
 
-const DEFAULT_MODEL = "openai/gpt-4o-mini"
+import { errorMessage, runLlmObject } from "../llm-utils"
 
 const projectKindEnum = z.enum([
   "construction:nuclear",
@@ -54,20 +53,22 @@ const requestSchema = z.object({
 })
 
 export async function POST(req: Request) {
-  const apiKey = process.env.OPENROUTER_API_KEY
-  if (!apiKey) {
-    return Response.json(
-      { error: "OPENROUTER_API_KEY is not set" },
-      { status: 500 }
-    )
-  }
-
   const body = await req.json()
   const parsed = requestSchema.safeParse(body)
   if (!parsed.success) {
     return Response.json({ error: parsed.error.format() }, { status: 400 })
   }
   const ctx = parsed.data
+
+  const apiKey = process.env.OPENROUTER_API_KEY
+  // No API key: silently fall back to the curated offline suggestions so the
+  // panel still works in local dev / when the key is unset.
+  if (!apiKey) {
+    return Response.json({
+      suggestions: offlineSuggestions(ctx.nation),
+      fallback: "no_api_key",
+    })
+  }
 
   const systemText = [
     "You are a strategy game assistant.",
@@ -91,24 +92,46 @@ export async function POST(req: Request) {
       : "Recent events: (none)",
   ].join("\n")
 
-  const openrouter = createOpenRouter({ apiKey })
-  const model = openrouter.chat(process.env.OPENROUTER_MODEL ?? DEFAULT_MODEL)
-
   try {
-    const result = await generateObject({
-      model,
+    const object = await runLlmObject({
+      apiKey,
       schema: suggestionsSchema,
       system: systemText,
       prompt: userText,
+      modelId: process.env.OPENROUTER_MODEL || undefined,
     })
-    return Response.json({ suggestions: result.object.suggestions })
+    return Response.json({ suggestions: object.suggestions })
   } catch (err) {
-    return Response.json(
-      {
-        error:
-          err instanceof Error ? err.message : "OpenRouter inference failed",
-      },
-      { status: 502 }
-    )
+    // Hand back the curated offline list rather than a 502; the player still
+    // gets a functional decisions panel.
+    return Response.json({
+      suggestions: offlineSuggestions(ctx.nation),
+      fallback: "llm_unavailable",
+      error: errorMessage(err, "OpenRouter inference failed"),
+    })
   }
+}
+
+function offlineSuggestions(nationRaw: string) {
+  const nation = nationRaw.trim().toUpperCase() as NationCode
+  const all = getSuggestionsForNation(nation)
+  // Pick three distinct kinds, picking the first match per kind.
+  const out: { kind: string; title: string; prompt: string; hint?: string }[] = []
+  const seenKinds = new Set<string>()
+  for (const s of all) {
+    if (seenKinds.has(s.kind)) continue
+    seenKinds.add(s.kind)
+    out.push({ kind: s.kind, title: s.title, prompt: s.prompt, hint: s.hint })
+    if (out.length === 3) break
+  }
+  while (out.length < 3 && all.length > 0) {
+    const filler = all[out.length % all.length]!
+    out.push({
+      kind: filler.kind,
+      title: filler.title,
+      prompt: filler.prompt,
+      hint: filler.hint,
+    })
+  }
+  return out
 }

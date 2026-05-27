@@ -1,8 +1,6 @@
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
-import { generateObject } from "ai"
 import { z } from "zod"
 
-const DEFAULT_MODEL = "openai/gpt-4o-mini"
+import { errorMessage, runLlmObject } from "../llm-utils"
 
 const channelEnum = z.enum(["sms", "tweet", "call", "letter"])
 const toneEnum = z.enum(["friendly", "neutral", "threatening", "joking"])
@@ -60,14 +58,6 @@ function describeChannel(channel: z.infer<typeof channelEnum>): string {
 }
 
 export async function POST(req: Request) {
-  const apiKey = process.env.OPENROUTER_API_KEY
-  if (!apiKey) {
-    return Response.json(
-      { error: "OPENROUTER_API_KEY is not set" },
-      { status: 500 }
-    )
-  }
-
   const body = await req.json()
   const parsed = requestSchema.safeParse(body)
   if (!parsed.success) {
@@ -80,6 +70,11 @@ export async function POST(req: Request) {
       { error: "Cannot send a diplomatic message to your own nation." },
       { status: 400 }
     )
+  }
+
+  const apiKey = process.env.OPENROUTER_API_KEY
+  if (!apiKey) {
+    return Response.json(staticReply(channel, tone, to.leaderName, from.leaderName))
   }
 
   const systemText = [
@@ -99,24 +94,44 @@ export async function POST(req: Request) {
     `Message: """${message}"""`,
   ].join("\n")
 
-  const openrouter = createOpenRouter({ apiKey })
-  const model = openrouter.chat(process.env.OPENROUTER_MODEL ?? DEFAULT_MODEL)
-
   try {
-    const result = await generateObject({
-      model,
+    const object = await runLlmObject({
+      apiKey,
       schema: responseSchema,
       system: systemText,
       prompt: userText,
+      modelId: process.env.OPENROUTER_MODEL || undefined,
     })
-    return Response.json(result.object)
+    return Response.json(object)
   } catch (err) {
     return Response.json(
       {
-        error:
-          err instanceof Error ? err.message : "OpenRouter inference failed",
-      },
-      { status: 502 }
+        ...staticReply(channel, tone, to.leaderName, from.leaderName),
+        fallback: "llm_unavailable",
+        error: errorMessage(err, "OpenRouter inference failed"),
+      }
     )
+  }
+}
+
+function staticReply(
+  channel: z.infer<typeof channelEnum>,
+  tone: z.infer<typeof toneEnum>,
+  recipientName: string,
+  senderName: string
+) {
+  const opinionByTone: Record<z.infer<typeof toneEnum>, number> = {
+    friendly: 4,
+    neutral: 1,
+    joking: 0,
+    threatening: -6,
+  }
+  return {
+    reply:
+      tone === "threatening"
+        ? `${senderName}, threats by ${channel} are not how partners speak. The matter is closed.`
+        : `${senderName}, message received. I'll take it under advisement and we will speak again soon.`,
+    opinionDelta: opinionByTone[tone],
+    briefingTitle: `${senderName} ${channel === "tweet" ? "tweets" : "writes"} ${recipientName}`,
   }
 }

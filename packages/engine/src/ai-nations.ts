@@ -166,14 +166,30 @@ export function computeProjectReactions(
   return out
 }
 
+export type AiActionKind =
+  | "propose_alliance"
+  | "break_alliance"
+  | "friendly"
+  | "hostile"
+  | "trade_deal"
+  | "foreign_investment"
+  | "sanctions"
+  | "tariffs"
+
 export interface AiAction {
   code: string
-  kind: "propose_alliance" | "break_alliance" | "friendly" | "hostile"
+  kind: AiActionKind
   opinionDelta: number
   briefingKind: BriefingKind
   briefingTitle: string
   briefingDetail?: string
   setAllied?: boolean
+  /** Economic effect on the player (€M into treasury, signed). */
+  treasuryDelta?: number
+  /** Economic effect on the player's GDP (€M / USD-equiv, signed). */
+  gdpDelta?: number
+  /** Sets `lastEconomicActionAt` on the nation's relation record. */
+  isEconomic?: boolean
 }
 
 export interface AiTickInput {
@@ -190,6 +206,8 @@ export interface AiTickResult {
 
 const DRIFT_PER_DAY = 0.002
 const ACTION_BASE_CHANCE_PER_DAY = 0.01
+const ECONOMIC_COOLDOWN_DAYS = 90
+const MS_PER_DAY = 86_400_000
 
 /**
  * One step of autonomous-AI simulation. Pure given the clock RNG: it does not
@@ -204,6 +222,7 @@ export function simulateAiTick(input: AiTickInput): AiTickResult {
   const days = Math.max(1, input.days)
   const isoDate = input.currentDate.toISOString()
 
+  const nowMs = input.currentDate.getTime()
   for (const profile of AI_NATIONS) {
     if (profile.code === playerKey) continue
     const current = nextRelations[profile.code] ?? DEFAULT_RELATION
@@ -215,6 +234,7 @@ export function simulateAiTick(input: AiTickInput): AiTickResult {
     let opinion = clamp(current.opinion + gap * driftFraction, -100, 100)
     let allied = current.allied
     let lastInteractionAt = current.lastInteractionAt
+    let lastEconomicActionAt = current.lastEconomicActionAt ?? null
 
     // Maybe take an autonomous action.
     const actionChance = Math.min(
@@ -231,21 +251,118 @@ export function simulateAiTick(input: AiTickInput): AiTickResult {
       }
     }
 
+    // Economic action: at most once every ECONOMIC_COOLDOWN_DAYS per nation.
+    const lastEcoMs = lastEconomicActionAt
+      ? Date.parse(lastEconomicActionAt)
+      : NaN
+    const eligible =
+      Number.isNaN(lastEcoMs) ||
+      nowMs - lastEcoMs >= ECONOMIC_COOLDOWN_DAYS * MS_PER_DAY
+    if (eligible) {
+      // Roughly one chance per quarter; activity scales frequency.
+      const chance = Math.min(
+        0.5,
+        (profile.activity * days) / ECONOMIC_COOLDOWN_DAYS
+      )
+      if (rand() < chance) {
+        const action = decideEconomicAction(profile, opinion, allied, rand)
+        if (action) {
+          opinion = clamp(opinion + action.opinionDelta, -100, 100)
+          lastInteractionAt = isoDate
+          lastEconomicActionAt = isoDate
+          actions.push(action)
+        }
+      }
+    }
+
     // Only persist a record when something is non-default.
     if (
       opinion !== DEFAULT_RELATION.opinion ||
       allied !== DEFAULT_RELATION.allied ||
-      lastInteractionAt !== DEFAULT_RELATION.lastInteractionAt
+      lastInteractionAt !== DEFAULT_RELATION.lastInteractionAt ||
+      lastEconomicActionAt !== null
     ) {
       nextRelations[profile.code] = {
         opinion: round1(opinion),
         allied,
         lastInteractionAt,
+        lastEconomicActionAt,
       }
     }
   }
 
   return { relations: nextRelations, actions }
+}
+
+function decideEconomicAction(
+  profile: AiNationProfile,
+  opinion: number,
+  allied: boolean,
+  rand: () => number
+): AiAction | null {
+  // Magnitude scales with how strongly the nation feels.
+  const intensity = Math.min(1, Math.abs(opinion) / 80)
+  const noise = 0.7 + rand() * 0.6 // 0.7..1.3
+
+  if (opinion >= 50 || allied) {
+    // Friendly economic gesture: trade deal or foreign investment.
+    if (rand() < 0.5) {
+      const gdp = Math.round(800 * intensity * noise)
+      return {
+        code: profile.code,
+        kind: "trade_deal",
+        opinionDelta: 1,
+        gdpDelta: gdp,
+        treasuryDelta: Math.round(gdp * 0.05),
+        isEconomic: true,
+        briefingKind: "milestone",
+        briefingTitle: `${profile.name} signs a trade deal`,
+        briefingDetail: `+€${gdp}M GDP · +€${Math.round(gdp * 0.05)}M treasury`,
+      }
+    }
+    const invest = Math.round(600 * intensity * noise)
+    return {
+      code: profile.code,
+      kind: "foreign_investment",
+      opinionDelta: 1,
+      gdpDelta: invest,
+      isEconomic: true,
+      briefingKind: "milestone",
+      briefingTitle: `${profile.name} announces inbound investment`,
+      briefingDetail: `+€${invest}M GDP from new ${profile.name} capital`,
+    }
+  }
+
+  if (opinion <= -40) {
+    // Hostile economic measure: sanctions or tariffs.
+    if (rand() < 0.5) {
+      const hit = Math.round(700 * intensity * noise)
+      return {
+        code: profile.code,
+        kind: "sanctions",
+        opinionDelta: -2,
+        gdpDelta: -hit,
+        treasuryDelta: -Math.round(hit * 0.1),
+        isEconomic: true,
+        briefingKind: "warning",
+        briefingTitle: `${profile.name} announces sanctions`,
+        briefingDetail: `−€${hit}M GDP · −€${Math.round(hit * 0.1)}M treasury`,
+      }
+    }
+    const tariff = Math.round(450 * intensity * noise)
+    return {
+      code: profile.code,
+      kind: "tariffs",
+      opinionDelta: -1,
+      gdpDelta: -tariff,
+      isEconomic: true,
+      briefingKind: "warning",
+      briefingTitle: `${profile.name} raises tariffs on French exports`,
+      briefingDetail: `−€${tariff}M GDP impact this quarter`,
+    }
+  }
+
+  return null
 }
 
 function decideAction(

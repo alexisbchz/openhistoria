@@ -1,4 +1,9 @@
-export { Game, SPEED_MS_PER_DAY } from "./game"
+export {
+  evaluateReformAgenda,
+  Game,
+  REFORM_AGENDAS,
+  SPEED_MS_PER_DAY,
+} from "./game"
 export type {
   BriefingEntry,
   BriefingKind,
@@ -7,10 +12,15 @@ export type {
   DiplomaticMessageArgs,
   DiplomaticTone,
   GameOutcome,
+  GameOverCause,
   GameOverState,
   GameSnapshot,
   GameSpeed,
+  HistorySample,
   NationCode,
+  ReformAgendaDef,
+  ReformAgendaId,
+  ReformAgendaState,
   RelationState,
 } from "./game"
 export {
@@ -26,7 +36,14 @@ export type {
   ProjectProgress,
   ProjectSnapshot,
 } from "./projects"
-export { clearGame, loadGame, saveGame } from "./storage"
+export {
+  clearGame,
+  clearQuarantine,
+  loadGame,
+  loadGameWithStatus,
+  saveGame,
+} from "./storage"
+export type { LoadGameResult } from "./storage"
 export { CountryStatsProvider } from "./country-stats"
 export type {
   CountryStats,
@@ -43,6 +60,7 @@ export type {
 export {
   EVENT_LIBRARY,
   getDueEvent,
+  getEventSeverity,
   getEventsForNation,
   getNextEvent,
 } from "./events"
@@ -51,9 +69,10 @@ export type {
   EventChoice,
   EventDefinition,
   EventEffects,
+  EventSeverity,
   TriggeredEvent,
 } from "./events"
-export { applyEconomyTick, getCashflow } from "./economy"
+export { applyEconomyTick, getCashflow, sanitizeStats } from "./economy"
 export type { CashflowSummary } from "./economy"
 export { maybeGenerateProceduralEvent } from "./procedural-events"
 export {
@@ -80,6 +99,7 @@ export {
 } from "./ai-nations"
 export type {
   AiAction,
+  AiActionKind,
   AiNationProfile,
   AiStance,
   AiTickInput,

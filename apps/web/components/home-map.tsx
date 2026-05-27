@@ -26,6 +26,7 @@ import { MapStates } from "@/components/map-states"
 import { MapTextureOverlay } from "@/components/map-texture-overlay"
 import { ProjectMarkers } from "@/components/project-markers"
 import { TimeControls } from "@/components/time-controls"
+import { TrendStrip } from "@/components/trend-strip"
 
 const ESRI_SATELLITE_URL =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
@@ -77,6 +78,7 @@ export function HomeMap() {
           <HomeHud
             bottomRight={
               <div className="flex flex-col items-end gap-2">
+                <TrendStrip />
                 <BriefingPanel />
                 <TimeControls />
                 <MapLayerToggles />

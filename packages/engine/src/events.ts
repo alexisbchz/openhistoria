@@ -9,6 +9,8 @@ export type EventCategory =
   | "scandal"
   | "opportunity"
 
+export type EventSeverity = "low" | "medium" | "high"
+
 export interface EventEffects {
   treasury?: number
   approval?: number
@@ -33,7 +35,16 @@ export interface EventDefinition {
   date: string
   title: string
   description: string
+  /**
+   * Story-shaping events (hand-authored, terminal, or with major effects) are
+   * "high" and pause the game so the player must decide. Lower-severity
+   * procedural events apply a default cabinet response automatically and are
+   * surfaced via the briefing log only.
+   */
+  severity?: EventSeverity
   choices: EventChoice[]
+  /** Optional index of the choice the cabinet picks when severity < high. */
+  defaultChoiceIndex?: number
 }
 
 export interface TriggeredEvent {
@@ -47,6 +58,7 @@ export const EVENT_LIBRARY: readonly EventDefinition[] = [
     id: "fr-2026-heatwave",
     nation: "FR",
     category: "crisis",
+    severity: "high",
     date: "2026-07-08",
     title: "Severe heatwave hits the south",
     description:
@@ -76,6 +88,7 @@ export const EVENT_LIBRARY: readonly EventDefinition[] = [
     id: "fr-2026-rail-strike",
     nation: "FR",
     category: "social",
+    severity: "high",
     date: "2026-09-22",
     title: "SNCF rolling strike begins",
     description:
@@ -102,6 +115,7 @@ export const EVENT_LIBRARY: readonly EventDefinition[] = [
     id: "fr-2026-eu-summit",
     nation: "FR",
     category: "diplomacy",
+    severity: "high",
     date: "2026-10-15",
     title: "EU summit on defence autonomy",
     description:
@@ -128,6 +142,7 @@ export const EVENT_LIBRARY: readonly EventDefinition[] = [
     id: "fr-2026-tech-scandal",
     nation: "FR",
     category: "scandal",
+    severity: "high",
     date: "2026-11-28",
     title: "Élysée data leak alleged",
     description:
@@ -154,6 +169,7 @@ export const EVENT_LIBRARY: readonly EventDefinition[] = [
     id: "fr-2027-budget-vote",
     nation: "FR",
     category: "economy",
+    severity: "high",
     date: "2027-01-20",
     title: "2027 budget vote in the Assembly",
     description:
@@ -180,6 +196,7 @@ export const EVENT_LIBRARY: readonly EventDefinition[] = [
     id: "fr-2027-presidential-election",
     nation: "FR",
     category: "election",
+    severity: "high",
     date: "2027-04-25",
     title: "2027 presidential election — final verdict",
     description:
@@ -204,6 +221,10 @@ export function getEventsForNation(nation: NationCode): EventDefinition[] {
     ...e,
     choices: e.choices.map((c) => ({ ...c, effects: { ...c.effects } })),
   }))
+}
+
+export function getEventSeverity(event: EventDefinition): EventSeverity {
+  return event.severity ?? "medium"
 }
 
 export function getNextEvent(

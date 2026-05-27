@@ -1,9 +1,9 @@
-import { createOpenRouter } from "@openrouter/ai-sdk-provider"
-import { generateObject } from "ai"
 import { z } from "zod"
 
-const DEFAULT_MODEL = "openai/gpt-4o-mini"
+import { errorMessage, runLlmObject } from "../llm-utils"
+
 const NOMINATIM_USER_AGENT = "openhistoria-dev (https://github.com/openhistoria)"
+const GEOCODE_TIMEOUT_MS = 8_000
 
 const projectKindEnum = z.enum([
   "construction:nuclear",
@@ -69,9 +69,20 @@ async function geocode(query: string): Promise<GeocodeResult> {
   url.searchParams.set("format", "json")
   url.searchParams.set("limit", "1")
 
-  const res = await fetch(url, {
-    headers: { "User-Agent": NOMINATIM_USER_AGENT, Accept: "application/json" },
-  })
+  const ac = new AbortController()
+  const timer = setTimeout(
+    () => ac.abort(new Error("Geocoding timed out")),
+    GEOCODE_TIMEOUT_MS
+  )
+  let res: Response
+  try {
+    res = await fetch(url, {
+      headers: { "User-Agent": NOMINATIM_USER_AGENT, Accept: "application/json" },
+      signal: ac.signal,
+    })
+  } finally {
+    clearTimeout(timer)
+  }
   if (!res.ok) {
     throw new Error(`Geocoding failed: HTTP ${res.status}`)
   }
@@ -120,26 +131,18 @@ export async function POST(req: Request) {
     `Decision: ${prompt}`,
   ].join("\n")
 
-  const openrouter = createOpenRouter({ apiKey })
-  const model = openrouter.chat(process.env.OPENROUTER_MODEL ?? DEFAULT_MODEL)
-
   let object: z.infer<typeof llmSchema>
   try {
-    const result = await generateObject({
-      model,
+    object = await runLlmObject({
+      apiKey,
       schema: llmSchema,
       system: systemText,
       prompt: userText,
+      modelId: process.env.OPENROUTER_MODEL || undefined,
     })
-    object = result.object
   } catch (err) {
     return Response.json(
-      {
-        error:
-          err instanceof Error
-            ? err.message
-            : "OpenRouter inference failed",
-      },
+      { error: errorMessage(err, "OpenRouter inference failed") },
       { status: 502 }
     )
   }
@@ -150,8 +153,7 @@ export async function POST(req: Request) {
   } catch (err) {
     return Response.json(
       {
-        error:
-          err instanceof Error ? err.message : "Geocoding failed",
+        error: errorMessage(err, "Geocoding failed"),
         attempted: object.location.query,
       },
       { status: 502 }

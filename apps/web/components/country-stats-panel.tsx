@@ -1,6 +1,11 @@
 "use client"
 
-import { getCashflow, getNextEvent } from "@workspace/engine"
+import {
+  evaluateReformAgenda,
+  getCashflow,
+  getNextEvent,
+  REFORM_AGENDAS,
+} from "@workspace/engine"
 import { Button } from "@workspace/ui/components/button"
 import {
   BanknoteIcon,
@@ -182,6 +187,7 @@ export function CountryStatsPanel() {
           value={formatPercent(stats.economy.publicDebtPctGdp)}
         />
       </ul>
+      <ReformAgendaStrip />
       {nextEvent && (
         <div className="flex items-start gap-2 border-t px-3 py-2 text-xs">
           <CalendarClockIcon className="mt-0.5 size-3.5 text-muted-foreground" />
@@ -254,5 +260,32 @@ function StatRow({
       <span className="flex-1 text-muted-foreground">{label}</span>
       <span className="font-medium tabular-nums">{value}</span>
     </li>
+  )
+}
+
+function ReformAgendaStrip() {
+  const game = useGame()
+  if (!game?.reformAgenda) return null
+  const def = REFORM_AGENDAS.find((a) => a.id === game.reformAgenda!.id)
+  if (!def) return null
+  const ok = evaluateReformAgenda(game)
+  return (
+    <div className="flex items-center gap-2 border-t bg-muted/30 px-3 py-2 text-xs">
+      <span
+        className={
+          ok
+            ? "h-2 w-2 shrink-0 rounded-full bg-emerald-500"
+            : "h-2 w-2 shrink-0 rounded-full bg-amber-500"
+        }
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1">
+        <div className="text-muted-foreground">Agenda</div>
+        <div className="truncate font-medium leading-tight">{def.short}</div>
+      </div>
+      <span className="shrink-0 text-[10px] uppercase tracking-wide text-muted-foreground">
+        {ok ? "on track" : "behind"}
+      </span>
+    </div>
   )
 }

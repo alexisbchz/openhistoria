@@ -13,6 +13,7 @@ import {
 import { BriefingToasts } from "@/components/briefing-toasts"
 import { CountryInfoPanel } from "@/components/country-info-panel"
 import { CountryStatsPanel } from "@/components/country-stats-panel"
+import { DebugOverlay } from "@/components/debug-overlay"
 import { DecisionsPanel } from "@/components/decisions-panel"
 import { PlaceSearchPanel } from "@/components/place-search-panel"
 import { EventDialog } from "@/components/event-dialog"
@@ -90,6 +91,7 @@ function HudShell({
       <WelcomeDialog />
       <PauseMenu />
       <BriefingToasts />
+      <DebugOverlay />
     </div>
   )
 }

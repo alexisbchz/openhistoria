@@ -349,7 +349,7 @@ describe("Snapshot round-trip", () => {
   it("round-trips relations through a snapshot", () => {
     const game = freshGame().proposeAlliance("GB")
     const snapshot = game.toSnapshot()
-    expect(snapshot.version).toBe(4)
+    expect(snapshot.version).toBe(5)
     expect(snapshot.relations["GB"]?.allied).toBe(true)
     const round = Game.fromSnapshot(snapshot)
     expect(round.getRelation("GB").allied).toBe(true)
@@ -376,8 +376,8 @@ describe("Snapshot round-trip", () => {
     const migrated = Game.fromSnapshot(v3)
     expect(migrated.relations).toEqual({})
     expect(migrated.getRelation("GB").allied).toBe(false)
-    // After mutation the snapshot bumps to v4.
-    expect(migrated.proposeAlliance("GB").toSnapshot().version).toBe(4)
+    // After mutation the snapshot bumps to the current schema version.
+    expect(migrated.proposeAlliance("GB").toSnapshot().version).toBe(5)
   })
 
   it("migrates v1 snapshots by seeding fresh treasury and stats", () => {
