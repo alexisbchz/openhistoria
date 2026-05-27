@@ -5,6 +5,7 @@ import {
   clearGame,
   clearQuarantine,
   loadGame,
+  loadGameResult,
   loadGameWithStatus,
   saveGame,
 } from "../src/storage"
@@ -84,6 +85,32 @@ describe("storage round-trip", () => {
     clearQuarantine()
     expect(store.has("openhistoria:save")).toBe(false)
     expect(store.has("openhistoria:save.bak")).toBe(false)
+  })
+
+  it("loadGameResult exposes a discriminated Result", () => {
+    // Happy path returns ok with the game.
+    saveGame(Game.createNew().with({ treasury: 999 }))
+    const ok = loadGameResult()
+    expect(ok.isOk()).toBe(true)
+    if (ok.isOk()) {
+      expect(ok.value?.treasury).toBe(999)
+    }
+  })
+
+  it("loadGameResult returns err with parse_error and quarantines on bad JSON", () => {
+    store.set("openhistoria:save", "{nope")
+    const result = loadGameResult()
+    expect(result.isErr()).toBe(true)
+    if (result.isErr()) {
+      expect(result.error.kind).toBe("parse_error")
+    }
+    expect(store.has("openhistoria:save")).toBe(false)
+    expect(store.has("openhistoria:save.bak")).toBe(true)
+  })
+
+  it("saveGame returns a Result; mapping happens via the ok branch", () => {
+    const result = saveGame(Game.createNew())
+    expect(result.isOk()).toBe(true)
   })
 
   it("sanitises NaN/Infinity in stored stats on load", () => {

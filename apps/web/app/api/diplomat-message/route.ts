@@ -1,6 +1,6 @@
 import { z } from "zod"
 
-import { errorMessage, runLlmObject } from "../llm-utils"
+import { describeLlmError, runLlmObject } from "../llm-utils"
 
 const channelEnum = z.enum(["sms", "tweet", "call", "letter"])
 const toneEnum = z.enum(["friendly", "neutral", "threatening", "joking"])
@@ -94,24 +94,22 @@ export async function POST(req: Request) {
     `Message: """${message}"""`,
   ].join("\n")
 
-  try {
-    const object = await runLlmObject({
-      apiKey,
-      schema: responseSchema,
-      system: systemText,
-      prompt: userText,
-      modelId: process.env.OPENROUTER_MODEL || undefined,
-    })
-    return Response.json(object)
-  } catch (err) {
-    return Response.json(
-      {
+  const result = await runLlmObject({
+    apiKey,
+    schema: responseSchema,
+    system: systemText,
+    prompt: userText,
+    modelId: process.env.OPENROUTER_MODEL || undefined,
+  })
+  return result.match(
+    (object) => Response.json(object),
+    (error) =>
+      Response.json({
         ...staticReply(channel, tone, to.leaderName, from.leaderName),
         fallback: "llm_unavailable",
-        error: errorMessage(err, "OpenRouter inference failed"),
-      }
-    )
-  }
+        error: describeLlmError(error),
+      })
+  )
 }
 
 function staticReply(

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { ResultAsync } from "neverthrow"
 
 const WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 const USER_AGENT =
@@ -125,13 +126,12 @@ export async function GET(req: Request) {
     )
   }
 
-  let alliances: Alliance[] = []
-  let usedFallback = false
-  try {
-    alliances = await fetchFromWikidata(code)
-  } catch {
-    usedFallback = true
-  }
+  const wikidata = await ResultAsync.fromPromise(
+    fetchFromWikidata(code),
+    (cause) => (cause instanceof Error ? cause : new Error(String(cause)))
+  )
+  let alliances: Alliance[] = wikidata.isOk() ? wikidata.value : []
+  let usedFallback = wikidata.isErr()
   if (alliances.length === 0) {
     const fallback = hardcodedFallback(code)
     if (fallback.length > 0) {

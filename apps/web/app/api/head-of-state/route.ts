@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { ResultAsync } from "neverthrow"
 
 const WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 const USER_AGENT =
@@ -115,24 +116,17 @@ export async function GET(req: Request) {
     )
   }
 
-  let hosRow: LeaderRow | null
-  let hogRow: LeaderRow | null
-  try {
-    ;[hosRow, hogRow] = await Promise.all([
-      fetchLeader(code, "P35"),
-      fetchLeader(code, "P6"),
-    ])
-  } catch (err) {
+  const both = await ResultAsync.fromPromise(
+    Promise.all([fetchLeader(code, "P35"), fetchLeader(code, "P6")]),
+    (cause) => (cause instanceof Error ? cause : new Error(String(cause)))
+  )
+  if (both.isErr()) {
     return NextResponse.json(
-      {
-        error:
-          err instanceof Error
-            ? `Wikidata request failed: ${err.message}`
-            : "Wikidata request failed",
-      },
+      { error: `Wikidata request failed: ${both.error.message}` },
       { status: 502 }
     )
   }
+  const [hosRow, hogRow] = both.value
 
   if (!hosRow && !hogRow) {
     return NextResponse.json(

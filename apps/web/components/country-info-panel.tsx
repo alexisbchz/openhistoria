@@ -32,6 +32,7 @@ import { CountryFlag } from "@/components/country-flag"
 import { FloatingPanel } from "@/components/floating-panel"
 import { useGame, useGameActions } from "@/components/game-provider"
 import { useMapSelection } from "@/components/map-country-regions"
+import { describeApiError, postJson } from "@/lib/api-client"
 
 interface CacheEntry {
   status: "loading" | "ready" | "error"
@@ -511,44 +512,33 @@ function LeaderComposer({
     setSending(true)
     setError(null)
     setReply(null)
-    try {
-      const res = await fetch("/api/diplomat-message", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          from: { nation: game.nation, leaderName: playerLeaderName },
-          to: { nation: targetCode, leaderName: targetLeaderName },
-          channel,
-          tone,
-          message: trimmed,
-        }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(
-          typeof body?.error === "string" ? body.error : `HTTP ${res.status}`
-        )
-      }
-      const data = (await res.json()) as {
-        reply: string
-        opinionDelta: number
-        briefingTitle: string
-      }
-      actions.sendDiplomaticMessage({
-        target: targetCode,
-        opinionDelta: data.opinionDelta,
-        cost,
-        briefingTitle: data.briefingTitle,
-        briefingDetail: `via ${CHANNEL_META[channel].label} · ${tone}`,
-        briefingKind: data.opinionDelta < 0 ? "warning" : "milestone",
-      })
-      setReply({ reply: data.reply, opinionDelta: data.opinionDelta })
-      setMessage("")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send")
-    } finally {
-      setSending(false)
-    }
+    const result = await postJson<{
+      reply: string
+      opinionDelta: number
+      briefingTitle: string
+    }>("/api/diplomat-message", {
+      from: { nation: game.nation, leaderName: playerLeaderName },
+      to: { nation: targetCode, leaderName: targetLeaderName },
+      channel,
+      tone,
+      message: trimmed,
+    })
+    result.match(
+      (data) => {
+        actions.sendDiplomaticMessage({
+          target: targetCode,
+          opinionDelta: data.opinionDelta,
+          cost,
+          briefingTitle: data.briefingTitle,
+          briefingDetail: `via ${CHANNEL_META[channel].label} · ${tone}`,
+          briefingKind: data.opinionDelta < 0 ? "warning" : "milestone",
+        })
+        setReply({ reply: data.reply, opinionDelta: data.opinionDelta })
+        setMessage("")
+      },
+      (error) => setError(describeApiError(error, "Failed to send"))
+    )
+    setSending(false)
   }
 
   return (

@@ -1,6 +1,11 @@
+import { errAsync, ResultAsync } from "neverthrow"
 import { z } from "zod"
 
-import { errorMessage, runLlmObject } from "../llm-utils"
+import {
+  describeLlmError,
+  runLlmObject,
+  type LlmError,
+} from "../llm-utils"
 
 const NOMINATIM_USER_AGENT = "openhistoria-dev (https://github.com/openhistoria)"
 const GEOCODE_TIMEOUT_MS = 8_000
@@ -58,12 +63,17 @@ const requestSchema = z.object({
   }),
 })
 
+type GeocodeError =
+  | { kind: "http_error"; status: number }
+  | { kind: "no_result"; query: string }
+  | { kind: "network_error"; cause: Error }
+
 interface GeocodeResult {
   latitude: number
   longitude: number
 }
 
-async function geocode(query: string): Promise<GeocodeResult> {
+function geocode(query: string): ResultAsync<GeocodeResult, GeocodeError> {
   const url = new URL("https://nominatim.openstreetmap.org/search")
   url.searchParams.set("q", query)
   url.searchParams.set("format", "json")
@@ -74,26 +84,64 @@ async function geocode(query: string): Promise<GeocodeResult> {
     () => ac.abort(new Error("Geocoding timed out")),
     GEOCODE_TIMEOUT_MS
   )
-  let res: Response
-  try {
-    res = await fetch(url, {
-      headers: { "User-Agent": NOMINATIM_USER_AGENT, Accept: "application/json" },
+
+  return ResultAsync.fromPromise<Response, GeocodeError>(
+    fetch(url, {
+      headers: {
+        "User-Agent": NOMINATIM_USER_AGENT,
+        Accept: "application/json",
+      },
       signal: ac.signal,
+    }),
+    (cause) => ({
+      kind: "network_error",
+      cause: cause instanceof Error ? cause : new Error(String(cause)),
     })
-  } finally {
-    clearTimeout(timer)
-  }
-  if (!res.ok) {
-    throw new Error(`Geocoding failed: HTTP ${res.status}`)
-  }
-  const results = (await res.json()) as Array<{ lat: string; lon: string }>
-  const top = results[0]
-  if (!top) {
-    throw new Error(`No geocoding result for: ${query}`)
-  }
-  return {
-    latitude: Number.parseFloat(top.lat),
-    longitude: Number.parseFloat(top.lon),
+  )
+    .andThen((res) => {
+      clearTimeout(timer)
+      if (!res.ok) {
+        return errAsync<{ lat: string; lon: string }[], GeocodeError>({
+          kind: "http_error",
+          status: res.status,
+        })
+      }
+      return ResultAsync.fromPromise<
+        Array<{ lat: string; lon: string }>,
+        GeocodeError
+      >(
+        res.json() as Promise<Array<{ lat: string; lon: string }>>,
+        (cause) => ({
+          kind: "network_error",
+          cause: cause instanceof Error ? cause : new Error(String(cause)),
+        })
+      )
+    })
+    .andThen((results) => {
+      const top = results[0]
+      if (!top) {
+        return errAsync<GeocodeResult, GeocodeError>({
+          kind: "no_result",
+          query,
+        })
+      }
+      return ResultAsync.fromSafePromise(
+        Promise.resolve({
+          latitude: Number.parseFloat(top.lat),
+          longitude: Number.parseFloat(top.lon),
+        })
+      )
+    })
+}
+
+function describeGeocodeError(error: GeocodeError, query: string): string {
+  switch (error.kind) {
+    case "http_error":
+      return `Geocoding failed: HTTP ${error.status}`
+    case "no_result":
+      return `No geocoding result for: ${error.query}`
+    case "network_error":
+      return error.cause.message || `Geocoding network error for: ${query}`
   }
 }
 
@@ -131,44 +179,56 @@ export async function POST(req: Request) {
     `Decision: ${prompt}`,
   ].join("\n")
 
-  let object: z.infer<typeof llmSchema>
-  try {
-    object = await runLlmObject({
-      apiKey,
-      schema: llmSchema,
-      system: systemText,
-      prompt: userText,
-      modelId: process.env.OPENROUTER_MODEL || undefined,
-    })
-  } catch (err) {
-    return Response.json(
-      { error: errorMessage(err, "OpenRouter inference failed") },
-      { status: 502 }
-    )
-  }
+  type Outcome =
+    | { stage: "llm"; error: LlmError }
+    | { stage: "geocode"; error: GeocodeError; query: string }
 
-  let coords: GeocodeResult
-  try {
-    coords = await geocode(object.location.query)
-  } catch (err) {
-    return Response.json(
-      {
-        error: errorMessage(err, "Geocoding failed"),
-        attempted: object.location.query,
-      },
-      { status: 502 }
-    )
-  }
-
-  return Response.json({
-    name: object.name,
-    kind: object.kind,
-    description: object.description,
-    expectedDurationDays: object.expectedDurationDays,
-    location: {
-      label: object.location.label,
-      latitude: coords.latitude,
-      longitude: coords.longitude,
-    },
+  const pipeline = runLlmObject({
+    apiKey,
+    schema: llmSchema,
+    system: systemText,
+    prompt: userText,
+    modelId: process.env.OPENROUTER_MODEL || undefined,
   })
+    .mapErr<Outcome>((error) => ({ stage: "llm", error }))
+    .andThen((object) =>
+      geocode(object.location.query)
+        .mapErr<Outcome>((error) => ({
+          stage: "geocode",
+          error,
+          query: object.location.query,
+        }))
+        .map((coords) => ({ object, coords }))
+    )
+
+  const result = await pipeline
+  return result.match(
+    ({ object, coords }) =>
+      Response.json({
+        name: object.name,
+        kind: object.kind,
+        description: object.description,
+        expectedDurationDays: object.expectedDurationDays,
+        location: {
+          label: object.location.label,
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        },
+      }),
+    (outcome) => {
+      if (outcome.stage === "llm") {
+        return Response.json(
+          { error: describeLlmError(outcome.error) },
+          { status: 502 }
+        )
+      }
+      return Response.json(
+        {
+          error: describeGeocodeError(outcome.error, outcome.query),
+          attempted: outcome.query,
+        },
+        { status: 502 }
+      )
+    }
+  )
 }

@@ -1,7 +1,7 @@
 import { getSuggestionsForNation, type NationCode } from "@workspace/engine"
 import { z } from "zod"
 
-import { errorMessage, runLlmObject } from "../llm-utils"
+import { describeLlmError, runLlmObject } from "../llm-utils"
 
 const projectKindEnum = z.enum([
   "construction:nuclear",
@@ -128,24 +128,24 @@ export async function POST(req: Request) {
       : "Recent events: (none)",
   ].join("\n")
 
-  try {
-    const object = await runLlmObject({
-      apiKey,
-      schema: suggestionsSchema,
-      system: systemText,
-      prompt: userText,
-      modelId: process.env.OPENROUTER_MODEL || undefined,
-    })
-    return Response.json({ suggestions: object.suggestions })
-  } catch (err) {
+  const result = await runLlmObject({
+    apiKey,
+    schema: suggestionsSchema,
+    system: systemText,
+    prompt: userText,
+    modelId: process.env.OPENROUTER_MODEL || undefined,
+  })
+  return result.match(
+    (object) => Response.json({ suggestions: object.suggestions }),
     // Hand back the curated offline list rather than a 502; the player still
     // gets a functional decisions panel.
-    return Response.json({
-      suggestions: offlineSuggestions(ctx.nation, ctx.reformAgenda ?? null),
-      fallback: "llm_unavailable",
-      error: errorMessage(err, "OpenRouter inference failed"),
-    })
-  }
+    (error) =>
+      Response.json({
+        suggestions: offlineSuggestions(ctx.nation, ctx.reformAgenda ?? null),
+        fallback: "llm_unavailable",
+        error: describeLlmError(error),
+      })
+  )
 }
 
 function offlineSuggestions(

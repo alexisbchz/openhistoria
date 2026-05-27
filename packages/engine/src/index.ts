@@ -40,10 +40,11 @@ export {
   clearGame,
   clearQuarantine,
   loadGame,
+  loadGameResult,
   loadGameWithStatus,
   saveGame,
 } from "./storage"
-export type { LoadGameResult } from "./storage"
+export type { LoadGameResult, StorageError } from "./storage"
 export { CountryStatsProvider } from "./country-stats"
 export type {
   CountryStats,

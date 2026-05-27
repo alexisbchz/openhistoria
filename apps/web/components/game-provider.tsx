@@ -12,6 +12,7 @@ import {
   type Project,
   type ReformAgendaId,
 } from "@workspace/engine"
+import { Result } from "neverthrow"
 import {
   createContext,
   useCallback,
@@ -304,35 +305,43 @@ export function GameProvider({ children }: { children: ReactNode }) {
           return current
         const t0 =
           typeof performance !== "undefined" ? performance.now() : Date.now()
-        try {
-          const next = current.tick(1)
-          const t1 =
-            typeof performance !== "undefined" ? performance.now() : Date.now()
-          autosave(next)
-          setTickStats((prev) => ({
-            lastDurationMs: t1 - t0,
-            lastTickAt: next.date.toISOString(),
-            totalTicks: prev.totalTicks + 1,
-            errors: prev.errors,
-            lastError: prev.lastError,
-          }))
-          return next
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err)
-          if (typeof console !== "undefined") {
-            console.error("[openhistoria] tick failed", err)
+        const ticked = Result.fromThrowable(
+          () => current.tick(1),
+          (cause) => (cause instanceof Error ? cause : new Error(String(cause)))
+        )()
+        return ticked.match(
+          (next) => {
+            const t1 =
+              typeof performance !== "undefined"
+                ? performance.now()
+                : Date.now()
+            autosave(next)
+            setTickStats((prev) => ({
+              lastDurationMs: t1 - t0,
+              lastTickAt: next.date.toISOString(),
+              totalTicks: prev.totalTicks + 1,
+              errors: prev.errors,
+              lastError: prev.lastError,
+            }))
+            return next
+          },
+          (err) => {
+            const message = err.message
+            if (typeof console !== "undefined") {
+              console.error("[openhistoria] tick failed", err)
+            }
+            toast.error("Game loop crashed", {
+              description: `${message}. Auto-paused; your last good save is intact.`,
+              duration: 6000,
+            })
+            setTickStats((prev) => ({
+              ...prev,
+              errors: prev.errors + 1,
+              lastError: message,
+            }))
+            return current.with({ paused: true })
           }
-          toast.error("Game loop crashed", {
-            description: `${message}. Auto-paused; your last good save is intact.`,
-            duration: 6000,
-          })
-          setTickStats((prev) => ({
-            ...prev,
-            errors: prev.errors + 1,
-            lastError: message,
-          }))
-          return current.with({ paused: true })
-        }
+        )
       })
     }, intervalMs)
     return () => clearInterval(id)

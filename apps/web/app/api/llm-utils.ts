@@ -1,9 +1,15 @@
 import { createOpenRouter } from "@openrouter/ai-sdk-provider"
 import { generateObject } from "ai"
+import { errAsync, okAsync, ResultAsync } from "neverthrow"
 import type { z } from "zod"
 
 export const DEFAULT_MODEL = "openai/gpt-4o-mini"
 export const LLM_TIMEOUT_MS = 15_000
+
+export type LlmError =
+  | { kind: "missing_api_key" }
+  | { kind: "timeout"; attempts: number }
+  | { kind: "inference_failed"; cause: Error; attempts: number }
 
 export interface RunLlmOptions<S extends z.ZodTypeAny> {
   apiKey: string
@@ -19,45 +25,60 @@ export interface RunLlmOptions<S extends z.ZodTypeAny> {
 }
 
 /**
- * Wraps `generateObject` with a timeout and a single retry so transient
- * OpenRouter slowness / 5xx blips don't surface as 502s to the player.
- * Caller still catches the final throw to apply a domain-specific fallback.
+ * Run a structured-output LLM call with timeout + retry. Returns a
+ * `ResultAsync<T, LlmError>` so callers can compose follow-up steps with
+ * `.andThen` and map the error to a domain-appropriate fallback without ever
+ * touching `try`/`catch`.
  */
-export async function runLlmObject<S extends z.ZodTypeAny>(
+export function runLlmObject<S extends z.ZodTypeAny>(
   opts: RunLlmOptions<S>
-): Promise<z.infer<S>> {
+): ResultAsync<z.infer<S>, LlmError> {
   const attempts = Math.max(1, opts.attempts ?? 2)
   const timeoutMs = opts.timeoutMs ?? LLM_TIMEOUT_MS
   const openrouter = createOpenRouter({ apiKey: opts.apiKey })
   const model = openrouter.chat(opts.modelId ?? DEFAULT_MODEL)
 
-  let lastError: unknown = null
-  for (let i = 0; i < attempts; i++) {
-    const ac = new AbortController()
-    const timer = setTimeout(() => ac.abort(new Error("LLM timeout")), timeoutMs)
-    try {
-      const result = await generateObject({
+  const attempt = (i: number): ResultAsync<z.infer<S>, LlmError> =>
+    fromTimedPromise(
+      generateObject({
         model,
         schema: opts.schema,
         system: opts.system,
         prompt: opts.prompt,
-        abortSignal: ac.signal,
+        abortSignal: makeAbortSignal(timeoutMs),
+      }),
+      timeoutMs,
+      attempts
+    )
+      .map((result) => result.object as z.infer<S>)
+      .orElse((error) => {
+        if (i + 1 >= attempts) return errAsync(error)
+        return ResultAsync.fromSafePromise(sleep(250 * (i + 1))).andThen(() =>
+          attempt(i + 1)
+        )
       })
-      clearTimeout(timer)
-      return result.object as z.infer<S>
-    } catch (err) {
-      clearTimeout(timer)
-      lastError = err
-      // No need to retry on the final attempt; let the caller decide.
-      if (i < attempts - 1) {
-        await sleep(250 * (i + 1))
-        continue
-      }
+
+  return attempt(0)
+}
+
+function fromTimedPromise<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  attempts: number
+): ResultAsync<T, LlmError> {
+  return ResultAsync.fromPromise<T, LlmError>(promise, (cause) => {
+    const e = cause instanceof Error ? cause : new Error(String(cause))
+    if (e.name === "AbortError" || /timed?\s*out/i.test(e.message)) {
+      return { kind: "timeout", attempts }
     }
-  }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("LLM call failed after retries")
+    return { kind: "inference_failed", cause: e, attempts }
+  })
+}
+
+function makeAbortSignal(timeoutMs: number): AbortSignal {
+  const ac = new AbortController()
+  setTimeout(() => ac.abort(new Error("LLM timeout")), timeoutMs)
+  return ac.signal
 }
 
 function sleep(ms: number): Promise<void> {
@@ -68,4 +89,20 @@ export function errorMessage(err: unknown, fallback: string): string {
   if (err instanceof Error) return err.message
   if (typeof err === "string") return err
   return fallback
+}
+
+export function describeLlmError(error: LlmError): string {
+  switch (error.kind) {
+    case "missing_api_key":
+      return "OPENROUTER_API_KEY is not set"
+    case "timeout":
+      return `LLM call timed out after ${error.attempts} attempt(s)`
+    case "inference_failed":
+      return error.cause.message
+  }
+}
+
+/** No-op helper used by routes that need an okAsync entry point. */
+export function okStart<T>(value: T): ResultAsync<T, never> {
+  return okAsync(value)
 }

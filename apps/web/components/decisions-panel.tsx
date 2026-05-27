@@ -38,6 +38,7 @@ import { useMemo, useState } from "react"
 import { FloatingPanel } from "@/components/floating-panel"
 import { useGame, useGameActions } from "@/components/game-provider"
 import { useHudState } from "@/components/hud-state"
+import { describeApiError, postJson } from "@/lib/api-client"
 
 interface DecideResponse {
   name: string
@@ -112,37 +113,27 @@ export function DecisionsPanel() {
     if (!game) return
     setAiLoading(true)
     setAiError(null)
-    try {
-      const res = await fetch("/api/suggest-decisions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          nation: game.nation,
-          date: game.date.toISOString(),
-          treasury: game.treasury,
-          approval: game.approval,
-          reformAgenda: game.reformAgenda?.id ?? null,
-          recentBriefings: game.briefing.slice(0, 5).map((b) => b.title),
-        }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(
-          typeof body?.error === "string" ? body.error : `HTTP ${res.status}`
-        )
-      }
-      const data = (await res.json()) as {
-        suggestions: Array<Omit<DecisionSuggestion, "id">>
-      }
-      const stamped: DecisionSuggestion[] = data.suggestions.map(
-        (s, i) => ({ ...s, id: `ai-${Date.now()}-${i}` })
-      )
-      setAiSuggestions(stamped)
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : "Unknown error")
-    } finally {
-      setAiLoading(false)
-    }
+    const result = await postJson<{
+      suggestions: Array<Omit<DecisionSuggestion, "id">>
+    }>("/api/suggest-decisions", {
+      nation: game.nation,
+      date: game.date.toISOString(),
+      treasury: game.treasury,
+      approval: game.approval,
+      reformAgenda: game.reformAgenda?.id ?? null,
+      recentBriefings: game.briefing.slice(0, 5).map((b) => b.title),
+    })
+    result.match(
+      (data) => {
+        const stamped: DecisionSuggestion[] = data.suggestions.map((s, i) => ({
+          ...s,
+          id: `ai-${Date.now()}-${i}`,
+        }))
+        setAiSuggestions(stamped)
+      },
+      (error) => setAiError(describeApiError(error))
+    )
+    setAiLoading(false)
   }
 
   function applySuggestion(s: DecisionSuggestion) {
@@ -158,57 +149,45 @@ export function DecisionsPanel() {
 
     setLoading(true)
     setError(null)
-    try {
-      const res = await fetch("/api/decide", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          prompt: trimmed,
-          context: {
-            nation: game.nation,
-            date: game.date.toISOString(),
-          },
-        }),
-      })
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(
-          typeof body?.error === "string" ? body.error : `HTTP ${res.status}`
+    const result = await postJson<DecideResponse>("/api/decide", {
+      prompt: trimmed,
+      context: {
+        nation: game.nation,
+        date: game.date.toISOString(),
+      },
+    })
+    result.match(
+      (data) => {
+        const start = startDate
+          ? new Date(`${startDate}T00:00:00`)
+          : game.date
+        const economics = defaultProjectEconomics(
+          data.kind,
+          data.expectedDurationDays
         )
-      }
-
-      const data = (await res.json()) as DecideResponse
-      const start = startDate
-        ? new Date(`${startDate}T00:00:00`)
-        : game.date
-      const economics = defaultProjectEconomics(
-        data.kind,
-        data.expectedDurationDays
-      )
-      if (game.treasury < economics.upfrontCost) {
-        throw new Error(
-          `Treasury short by €${(economics.upfrontCost - game.treasury).toFixed(0)}M. Cut spending or pick a smaller project.`
-        )
-      }
-      const project: Project = {
-        id: newId(),
-        kind: data.kind,
-        name: data.name,
-        description: data.description,
-        expectedDurationDays: data.expectedDurationDays,
-        location: data.location,
-        startedAt: start.toISOString(),
-        ...economics,
-      }
-      addProject(project)
-      setPrompt("")
-      setStartDate("")
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error")
-    } finally {
-      setLoading(false)
-    }
+        if (game.treasury < economics.upfrontCost) {
+          setError(
+            `Treasury short by €${(economics.upfrontCost - game.treasury).toFixed(0)}M. Cut spending or pick a smaller project.`
+          )
+          return
+        }
+        const project: Project = {
+          id: newId(),
+          kind: data.kind,
+          name: data.name,
+          description: data.description,
+          expectedDurationDays: data.expectedDurationDays,
+          location: data.location,
+          startedAt: start.toISOString(),
+          ...economics,
+        }
+        addProject(project)
+        setPrompt("")
+        setStartDate("")
+      },
+      (error) => setError(describeApiError(error))
+    )
+    setLoading(false)
   }
 
   if (!game) return null
