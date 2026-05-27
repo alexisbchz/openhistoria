@@ -20,6 +20,7 @@ import {
 } from "./projects"
 import {
   computeProjectReactions,
+  maybeGenerateAiProposal,
   simulateAiTick,
   type AiAction,
 } from "./ai-nations"
@@ -852,7 +853,17 @@ export class Game {
             triggeredIds,
             triggeredEvents,
           })
-      const candidate = due ?? generated
+      // If neither a scheduled story event nor a procedural event fires, the
+      // AI may itself initiate a proposal aimed at the player.
+      const aiProposal =
+        due || generated
+          ? null
+          : maybeGenerateAiProposal({
+              playerNation: this.nation,
+              relations: this.relations,
+              currentDate: newDate,
+            })
+      const candidate = due ?? generated ?? aiProposal
       if (candidate) {
         const severity = getEventSeverity(candidate)
         if (severity === "high") {

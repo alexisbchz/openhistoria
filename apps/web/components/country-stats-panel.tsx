@@ -21,8 +21,9 @@ import {
   UsersRoundIcon,
   WalletIcon,
 } from "lucide-react"
-import { useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 
+import { ApprovalBreakdown } from "@/components/approval-breakdown"
 import { CabinetSheet } from "@/components/cabinet-sheet"
 import { CountryFlag } from "@/components/country-flag"
 import { FloatingPanel } from "@/components/floating-panel"
@@ -193,6 +194,7 @@ export function CountryStatsPanel() {
         />
       </ul>
       <ReformAgendaStrip />
+      <ApprovalBreakdownInline />
       {nextEvent && (
         <div className="flex items-start gap-2 border-t px-3 py-2 text-xs">
           <CalendarClockIcon className="mt-0.5 size-3.5 text-muted-foreground" />
@@ -220,6 +222,7 @@ export function CountryStatsPanel() {
           >
             <BanknoteIcon /> Bond €5B
           </Button>
+          <BigBondButton onIssue={() => issueBond(30_000)} />
           <Button
             variant="outline"
             size="sm"
@@ -265,6 +268,42 @@ function StatRow({
       <span className="flex-1 text-muted-foreground">{label}</span>
       <span className="font-medium tabular-nums">{value}</span>
     </li>
+  )
+}
+
+function BigBondButton({ onIssue }: { onIssue: () => void }) {
+  const [armed, setArmed] = useState(false)
+  // Auto-disarm after 4s so a stray click doesn't sit primed forever.
+  useEffect(() => {
+    if (!armed) return
+    const t = setTimeout(() => setArmed(false), 4000)
+    return () => clearTimeout(t)
+  }, [armed])
+  return (
+    <Button
+      variant={armed ? "destructive" : "outline"}
+      size="sm"
+      onClick={() => {
+        if (armed) {
+          onIssue()
+          setArmed(false)
+        } else {
+          setArmed(true)
+        }
+      }}
+      title="Raise €30B in one tranche. Significant debt + approval cost."
+    >
+      <BanknoteIcon />
+      {armed ? "Confirm €30B?" : "Bond €30B"}
+    </Button>
+  )
+}
+
+function ApprovalBreakdownInline() {
+  return (
+    <div className="border-t bg-muted/30 px-3 py-2">
+      <ApprovalBreakdown />
+    </div>
   )
 }
 

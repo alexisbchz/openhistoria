@@ -1,4 +1,5 @@
 import { getClock } from "./clock"
+import type { EventDefinition } from "./events"
 import type { ProjectKind } from "./projects"
 import {
   DEFAULT_RELATION,
@@ -494,4 +495,185 @@ function clamp(v: number, lo: number, hi: number): number {
 
 function round1(v: number): number {
   return Math.round(v * 10) / 10
+}
+
+const PROPOSAL_BASE_CHANCE_PER_DAY = 0.0015
+const PROPOSAL_COOLDOWN_DAYS = 120
+
+export interface ProposalInput {
+  playerNation: string
+  relations: Readonly<Record<string, RelationState>>
+  currentDate: Date
+  baseChancePerDay?: number
+}
+
+/**
+ * Occasionally an AI nation initiates a high-severity proposal targeted at
+ * the player. We synthesise an `EventDefinition` so the existing event
+ * dialog handles the player's accept/decline; effects on relations and the
+ * treasury are encoded as the event's choice effects, which the engine
+ * already knows how to apply.
+ *
+ * Returns null on most days. Throttled by `lastInteractionAt` so a chatty
+ * nation can't spam proposals.
+ */
+export function maybeGenerateAiProposal(
+  input: ProposalInput
+): EventDefinition | null {
+  const baseChance = input.baseChancePerDay ?? PROPOSAL_BASE_CHANCE_PER_DAY
+  if (getClock().random() > baseChance) return null
+
+  const playerKey = input.playerNation.toUpperCase()
+  const now = input.currentDate.getTime()
+  const eligible = AI_NATIONS.filter((p) => {
+    if (p.code === playerKey) return false
+    const rel = input.relations[p.code]
+    if (!rel) return true
+    if (!rel.lastInteractionAt) return true
+    const last = Date.parse(rel.lastInteractionAt)
+    if (Number.isNaN(last)) return true
+    return now - last >= PROPOSAL_COOLDOWN_DAYS * MS_PER_DAY
+  })
+  if (eligible.length === 0) return null
+
+  // Weight selection by activity so US/RU send more proposals than ES/IT.
+  const totalWeight = eligible.reduce((s, p) => s + p.activity, 0)
+  let roll = getClock().random() * totalWeight
+  let picked = eligible[0]!
+  for (const p of eligible) {
+    roll -= p.activity
+    if (roll <= 0) {
+      picked = p
+      break
+    }
+  }
+
+  const rel = input.relations[picked.code]
+  const opinion = rel?.opinion ?? 0
+  const allied = rel?.allied ?? false
+  const iso = input.currentDate.toISOString().slice(0, 10)
+  const id = `ai-proposal-${picked.code}-${iso}-${shortId()}`
+
+  if (allied) {
+    return {
+      id,
+      nation: input.playerNation as NationCode,
+      category: "diplomacy",
+      severity: "high",
+      date: iso,
+      title: `${picked.name} proposes a joint defence project`,
+      description: `Your ally ${picked.name} wants to co-finance a €${1500}M joint defence capability. Co-financing strengthens the pact; declining cools relations.`,
+      choices: [
+        {
+          id: "accept",
+          label: "Co-finance the joint project",
+          effects: { treasury: -1500, gdpDelta: 800, approval: 1 },
+        },
+        {
+          id: "decline",
+          label: "Decline (mild relationship cost)",
+          effects: { approval: -1 },
+        },
+      ],
+    }
+  }
+
+  if (opinion >= 50) {
+    return {
+      id,
+      nation: input.playerNation as NationCode,
+      category: "diplomacy",
+      severity: "high",
+      date: iso,
+      title: `${picked.name} proposes a formal alliance`,
+      description: `${picked.name}'s government floats a mutual-defence pact. Accepting raises opinion and locks in the alliance; declining is a snub.`,
+      choices: [
+        {
+          id: "accept",
+          label: "Accept the alliance",
+          effects: { approval: 2 },
+        },
+        {
+          id: "decline",
+          label: "Decline politely",
+          effects: { approval: -1 },
+        },
+      ],
+    }
+  }
+
+  if (opinion >= 15) {
+    return {
+      id,
+      nation: input.playerNation as NationCode,
+      category: "diplomacy",
+      severity: "high",
+      date: iso,
+      title: `${picked.name} proposes a bilateral trade pact`,
+      description: `${picked.name} offers a modest trade pact: small upfront cost, real economic upside, opinion warmer.`,
+      choices: [
+        {
+          id: "accept",
+          label: "Sign the pact",
+          effects: { treasury: -200, gdpDelta: 600, approval: 1 },
+        },
+        {
+          id: "decline",
+          label: "Pass; we have other priorities",
+          effects: {},
+        },
+      ],
+    }
+  }
+
+  if (opinion <= -40) {
+    return {
+      id,
+      nation: input.playerNation as NationCode,
+      category: "diplomacy",
+      severity: "high",
+      date: iso,
+      title: `${picked.name} delivers a démarche`,
+      description: `${picked.name} formally demands you halt military cooperation with its rivals. Accepting calms tensions but constrains foreign policy; refusing widens the rift.`,
+      choices: [
+        {
+          id: "accept",
+          label: "Accept the demand (relations improve)",
+          effects: { approval: -1, gdpDelta: -200 },
+        },
+        {
+          id: "refuse",
+          label: "Refuse publicly (relations worsen)",
+          effects: { approval: 1 },
+        },
+      ],
+    }
+  }
+
+  // Mild/neutral relationship: a routine state visit proposal.
+  return {
+    id,
+    nation: input.playerNation as NationCode,
+    category: "diplomacy",
+    severity: "high",
+    date: iso,
+    title: `${picked.name} requests a state visit`,
+    description: `${picked.name}'s embassy floats a working visit. Hosting costs a little, builds goodwill; declining costs nothing but signals neglect.`,
+    choices: [
+      {
+        id: "host",
+        label: "Host the visit",
+        effects: { treasury: -120, approval: 1 },
+      },
+      {
+        id: "delegate",
+        label: "Send the foreign minister instead",
+        effects: {},
+      },
+    ],
+  }
+}
+
+function shortId(): string {
+  return getClock().random().toString(36).slice(2, 8)
 }

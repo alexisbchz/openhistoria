@@ -109,6 +109,7 @@ export {
   computeProjectReactions,
   getAiProfile,
   getBlocsForNation,
+  maybeGenerateAiProposal,
   simulateAiTick,
 } from "./ai-nations"
 export type {
