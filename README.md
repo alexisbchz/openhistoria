@@ -16,6 +16,8 @@ every other country is built from live World Bank + Wikidata data with a
 deterministic offline fallback, and votes in a synthesised election 11 months
 into the mandate.
 
+![Open Historia — governing France: country stats, reform agenda, interest-group lobbies, the world map, and the election countdown](docs/screenshot.png)
+
 ## What's in it
 
 - **Tickable engine** (`packages/engine`) — immutable `Game` with a clock,
